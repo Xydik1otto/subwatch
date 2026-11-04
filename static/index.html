@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<title>subwatch</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 860px; margin: 2rem auto; padding: 0 1rem; }
+  table { border-collapse: collapse; width: 100%; }
+  td, th { border: 1px solid #ccc; padding: .35rem .6rem; text-align: left; }
+  .warn { background: #fdecea; }
+  .cards { display: flex; gap: 1rem; flex-wrap: wrap; margin: 1rem 0; }
+  .card { border: 1px solid #ccc; border-radius: 8px; padding: .8rem 1.2rem; }
+  .card b { display: block; font-size: 1.4rem; }
+  .due { font-weight: 600; }
+</style>
+</head>
+<body>
+<h1>subwatch</h1>
+<p>Локальний трекер підписок. Дані — лише у вашому SQLite. <a href="/api/export.ics">Експорт .ics</a></p>
+<div class="cards" id="cards"></div>
+
+<h2>Підписки (за датою списання)</h2>
+<table id="subs"></table>
+
+<h2>Найближчі 30 днів</h2>
+<table id="upcoming"></table>
+
+<script>
+function money(x, c) { return x.toFixed(2) + ' ' + c; }
+async function load() {
+  const s = await (await fetch('/api/summary')).json();
+  const monthly = Object.entries(s.monthly_by_currency).map(([c, v]) => money(v, c)).join(' + ') || '—';
+  document.getElementById('cards').innerHTML =
+    `<div class="card">Активних<b>${s.active_count}</b></div>` +
+    `<div class="card">На місяць<b>${monthly}</b></div>` +
+    `<div class="card">На рік<b>${Object.entries(s.yearly_by_currency).map(([c, v]) => money(v, c)).join(' + ') || '—'}</b></div>`;
+
+  const subs = await (await fetch('/api/subscriptions')).json();
+  document.getElementById('subs').innerHTML =
+    '<tr><th>Назва</th><th>Сума</th><th>Цикл</th><th>Наступне списання</th><th>Тріал</th></tr>' +
+    (subs.map(x =>
+      `<tr${x.trial_end_date ? ' class="warn"' : ''}><td>${x.name}</td>` +
+      `<td>${money(x.amount, x.currency)}</td><td>${x.cycle}</td>` +
+      `<td class="due">${x.next_due_date}</td>` +
+      `<td>${x.trial_end_date || '—'}</td></tr>`).join('') ||
+     '<tr><td colspan="5">порожньо — додайте через POST /api/subscriptions</td></tr>');
+
+  const up = await (await fetch('/api/upcoming?days=30')).json();
+  document.getElementById('upcoming').innerHTML =
+    '<tr><th>Дата</th><th>Що</th><th>Сума</th><th>Попередження</th></tr>' +
+    (up.map(x =>
+      `<tr${x.warning ? ' class="warn"' : ''}><td>${x.date}</td>` +
+      `<td>${x.kind === 'trial_end' ? '🔚 Кінець тріалу: ' : '💳 '}${x.subscription.name}</td>` +
+      `<td>${money(x.subscription.amount, x.subscription.currency)}</td>` +
+      `<td>${x.kind === 'trial_end' && x.warning ? 'СКАСУЙТЕ ДО ЦІЄЇ ДАТИ' : ''}</td></tr>`).join('') ||
+     '<tr><td colspan="4">нічого</td></tr>');
+}
+load();
+</script>
+</body>
+</html>
