@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import alerts as alerts_mod, cancel_kb, csvimport, demo as demo_mod, family, history, ics, native_accel, projection as projection_mod, rates, schedule, tags as tags_mod
+from . import alerts as alerts_mod, cancel_kb, cancel_reminder, csvimport, demo as demo_mod, family, history, ics, native_accel, projection as projection_mod, rates, schedule, tags as tags_mod, trends as trends_mod
 from .db import DB_PATH, connect
 
 app = FastAPI(title="subwatch", version="1.0.0",
@@ -55,6 +55,7 @@ def _row_dict(r) -> dict:
                          if uses and uses > 0 else None)
     d["paused"] = bool(d.get("paused"))
     d["cancel_planned"] = bool(d.get("cancel_planned"))
+    d["cancel_days_before"] = d.get("cancel_days_before")
     d["owner"] = d.get("owner")
     d["payer"] = d.get("payer")
     d["share_pct"] = d.get("share_pct", 100)
@@ -194,6 +195,14 @@ def mark_paid(sub_id: int):
     with conn:
         conn.execute("UPDATE subscriptions SET next_due_date = ? WHERE id = ?",
                      (nxt.isoformat(), sub_id))
+    # Cancel reminder з "N днів до списання" їде разом зі списанням:
+    # дедлайн перераховується від нового next_due_date, інакше він "старіє".
+    if row["cancel_planned"] and row["cancel_days_before"] is not None:
+        deadline = cancel_reminder.deadline_for(nxt, row["cancel_days_before"])
+        with conn:
+            conn.execute(
+                "UPDATE subscriptions SET cancel_deadline = ? WHERE id = ?",
+                (deadline.isoformat(), sub_id))
     return {"id": sub_id, "next_due_date": nxt.isoformat()}
 
 
@@ -233,9 +242,52 @@ def unplan_cancel(sub_id: int):
         raise HTTPException(404, "subscription not found")
     with conn:
         conn.execute(
-            "UPDATE subscriptions SET cancel_planned = 0, cancel_deadline = NULL"
-            " WHERE id = ?", (sub_id,))
+            "UPDATE subscriptions SET cancel_planned = 0, cancel_deadline = NULL,"
+            " cancel_days_before = NULL WHERE id = ?", (sub_id,))
     return {"id": sub_id, "cancel_planned": False, "cancel_deadline": None}
+
+
+class CancelReminderIn(BaseModel):
+    days_before: int = Field(ge=1, le=90)
+
+
+@app.post("/api/subscriptions/{sub_id}/cancel-reminder")
+def set_cancel_reminder(sub_id: int, body: CancelReminderIn):
+    """'Cancel reminder' за N днів ДО списання: дедлайн скасування
+    виводиться автоматично як next_due_date - N (і перераховується
+    при mark-paid), щоб встигнути скасувати, а не дізнатись постфактум."""
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM subscriptions WHERE id = ?",
+                       (sub_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, "subscription not found")
+    next_due = dt.date.fromisoformat(row["next_due_date"])
+    deadline = cancel_reminder.deadline_for(next_due, body.days_before)
+    with conn:
+        conn.execute(
+            "UPDATE subscriptions SET cancel_planned = 1, cancel_deadline = ?,"
+            " cancel_days_before = ? WHERE id = ?",
+            (deadline.isoformat(), body.days_before, sub_id))
+    return {"id": sub_id, "cancel_planned": True,
+            "days_before": body.days_before,
+            "cancel_deadline": deadline.isoformat(),
+            "next_due_date": row["next_due_date"]}
+
+
+@app.get("/api/cancel-reminders")
+def cancel_reminders(days: int = 7, today: str | None = None):
+    """Заплановані скасування, чий дедлайн настає протягом `days` днів —
+    список для нагадування «встигнути скасувати». `today` (YYYY-MM-DD) —
+    опціональний override для тестів/прев'ю."""
+    if days < 0:
+        raise HTTPException(422, "days must be >= 0")
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT * FROM subscriptions WHERE active = 1 AND paused = 0"
+        " AND cancel_planned = 1"
+    ).fetchall()
+    as_of = dt.date.fromisoformat(today) if today else dt.date.today()
+    return cancel_reminder.due_reminders(rows, as_of, days)
 
 
 @app.get("/api/to-cancel")
@@ -417,6 +469,31 @@ def projection_svg(months: int = 12):
     return Response(content=svg, media_type="image/svg+xml")
 
 
+# --- spending trends: останні N місяців -----------------------------------------
+
+@app.get("/api/trends")
+def spending_trends(months: int = 6, today: str | None = None):
+    """Spending trends по місяцях: фактичні списання за останні `months`
+    місяців (включно з поточним) + середнє і тренд останнього місяця
+    проти середнього. `today` (YYYY-MM-DD) — override для тестів/прев'ю."""
+    if months < 1 or months > 36:
+        raise HTTPException(422, "months must be between 1 and 36")
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT * FROM subscriptions WHERE active = 1 AND paused = 0").fetchall()
+    as_of = dt.date.fromisoformat(today) if today else dt.date.today()
+    trends = trends_mod.monthly_trends(rows, as_of, months)
+    return {
+        "months": trends,
+        "summary": trends_mod.trend_summary(trends),
+        "primary_currency": (max(((ccy, s["window_total"])
+                                  for ccy, s in trends_mod.trend_summary(
+                                      trends)["per_currency"].items()),
+                                 key=lambda kv: kv[1],
+                                 default=(None, 0))[0]),
+    }
+
+
 # --- tag analytics ---------------------------------------------------------------
 
 @app.get("/api/tags")
@@ -454,7 +531,7 @@ def tag_analytics_svg():
 # --- CSV import ---------------------------------------------------------------
 
 class ImportAnalyzeIn(BaseModel):
-    csv: str
+    csv: str   # текст виписки: CSV або JSON; JSON розпізнається автоматично
     preset: str | None = None   # 'revolut' | 'wise' — див. GET /api/import/presets
 
 
@@ -481,10 +558,11 @@ def import_presets():
 
 @app.post("/api/import/analyze")
 def import_analyze(body: ImportAnalyzeIn):
-    """Parse a bank CSV and return recurring-payment candidates.
+    """Parse a bank statement (CSV or JSON — JSON is auto-detected) and
+    return recurring-payment candidates.
 
     With `preset` ('revolut'/'wise') the header row is matched against the
-    bank's known column names instead of guessing.
+    bank's known column names instead of guessing (CSV only).
     """
     try:
         parsed_rows, candidates = native_accel.parse_and_detect(body.csv, body.preset)
@@ -665,6 +743,57 @@ def price_changes():
     """Human-readable price-change summaries ('Netflix: 15.49→16.99 ...')."""
     conn = get_conn()
     return history.price_change_summaries(conn)
+
+
+# --- dashboard widgets ----------------------------------------------------------
+
+@app.get("/api/dashboard")
+def dashboard(widgets: str | None = None):
+    """Усі віджети дашборда одним викликом (один round-trip замість шести).
+
+    Стандартний набір: summary, upcoming (7 днів), trials, to-cancel,
+    unseen alerts, worst offenders (топ-3) і 3-місячний spending trend.
+    `widgets` — кома-розділений підмножина імен віджетів для вибіркового
+    запиту (наприклад 'summary,trends').
+    """
+    conn = get_conn()
+    requested = ([w.strip() for w in widgets.split(",") if w.strip()]
+                 if widgets else
+                 ["summary", "upcoming", "trials", "to_cancel",
+                  "unseen_alerts", "worst_offenders", "trends"])
+    out = {}
+    if "summary" in requested:
+        out["summary"] = summary()
+    if "upcoming" in requested:
+        out["upcoming"] = upcoming(days=7)
+    if "trials" in requested:
+        out["trials"] = trials()
+    if "to_cancel" in requested:
+        planned = conn.execute(
+            "SELECT * FROM subscriptions WHERE active = 1 AND paused = 0"
+            " AND cancel_planned = 1 ORDER BY cancel_deadline ASC").fetchall()
+        out["to_cancel"] = {
+            "count": len(planned),
+            "nearest_deadline": (planned[0]["cancel_deadline"]
+                                 if planned else None),
+        }
+    if "unseen_alerts" in requested:
+        out["unseen_alerts"] = alerts_mod.unseen_count(conn)
+    if "worst_offenders" in requested:
+        out["worst_offenders"] = worst_offenders(limit=3)
+    if "trends" in requested:
+        rows = conn.execute(
+            "SELECT * FROM subscriptions WHERE active = 1 AND paused = 0"
+        ).fetchall()
+        trends_list = trends_mod.monthly_trends(rows, dt.date.today(), 3)
+        out["trends"] = {
+            "months": trends_list,
+            "summary": trends_mod.trend_summary(trends_list),
+        }
+    unknown = set(requested) - set(out)
+    if unknown:
+        raise HTTPException(422, f"unknown widgets: {', '.join(sorted(unknown))}")
+    return out
 
 
 @app.get("/")

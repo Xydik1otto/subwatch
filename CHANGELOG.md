@@ -6,6 +6,27 @@
 ## [Unreleased]
 
 ### Added
+- **Dashboard widgets**: `GET /api/dashboard` — усі віджети дашборда одним
+  викликом (summary, upcoming 7 днів, trials, to-cancel, unseen alerts,
+  worst offenders топ-3, 3-місячний spending trend) або вибірково через
+  `?widgets=summary,trends`; невідомі імена віджетів → 422.
+- **Spending trends по місяцях**: `backend/trends.py` + `GET /api/trends?months=N`
+  — фактичні списання за останні N місяців (дзеркало projection, але назад),
+  помісячні суми по валютах (валюти не змішуються), середнє за вікно,
+  `delta_pct` і напрямок тренду останнього місяця проти середнього
+  (up/flat/down, поріг ±5%).
+- **Імпорт виписок у форматі JSON** (поряд із CSV): `parse_json_statement()`
+  і формат-агностичний `parse_statement()` у `backend/csvimport.py`;
+  `/api/import/analyze` автоматично розпізнає JSON (список об'єктів,
+  `{"transactions": [...]}`, `{"statement": {"transactions": [...]}}`,
+  `{"data": [...]}`; вкладені `amount.value/amount.currency` у стилі
+  Monzo/Starling) і повертає тих самих кандидатів повторюваних платежів.
+- **Cancel reminders за N днів до списання**: `POST
+  /api/subscriptions/{id}/cancel-reminder` виводить дедлайн скасування
+  автоматично як `next_due_date - N` (колонка `cancel_days_before`), а
+  `GET /api/cancel-reminders?days=N` — список «встигнути скасувати».
+  Дедлайн перераховується при mark-paid (їде разом зі списанням) і,
+  як і раніше, потрапляє в .ics (подія CANCEL BEFORE).
 - **Нативний акселератор детекції (C# / .NET 10)**: `dotnet/SubRec` —
   CLI-порт рушія повторюваних платежів (`parse_csv` + `detect_recurring`):
   нормалізація описів, групування, періоди 7/14/30/31/365 днів ±2,

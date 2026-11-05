@@ -14,6 +14,7 @@ from __future__ import annotations
 import csv
 import datetime as dt
 import io
+import json
 import re
 import statistics
 from dataclasses import dataclass
@@ -249,6 +250,98 @@ def parse_csv(text: str, preset_name: str | None = None) -> list[Txn]:
     if not out:
         raise ValueError("no parsable (date, amount) rows in CSV")
     return out
+
+
+# --- JSON statement parsing ---------------------------------------------------
+#
+# Багато банків експортують виписку не тільки CSV, а й JSON. Підтримуються
+# поширені форми: список об'єктів, {"transactions": [...]},
+# {"statement": {"transactions": [...]}} та {"data": [...]}.
+# Ключі полів — з різних реальних експортів (Monzo/Starling/Plaid-подібні).
+
+_JSON_DATE_KEYS = ("date", "posted", "transactiondate", "bookeddate",
+                   "booked", "created", "settledate")
+_JSON_DESC_KEYS = ("description", "name", "merchant", "narrative",
+                   "details", "payee")
+_JSON_AMT_KEYS = ("amount", "transactionamount", "value")
+_JSON_CCY_KEYS = ("currency",)
+
+_JSON_CONTAINERS = ("transactions", "statement", "data", "items", "results")
+
+
+def _json_first_key(obj: dict, keys: tuple[str, ...]):
+    lowered = {k.lower(): k for k in obj if isinstance(k, str)}
+    for k in keys:
+        if k in lowered:
+            return obj[lowered[k]]
+    return None
+
+
+def _json_txn_from(obj: dict) -> Txn | None:
+    raw_date = _json_first_key(obj, _JSON_DATE_KEYS)
+    raw_desc = _json_first_key(obj, _JSON_DESC_KEYS)
+    raw_amt = _json_first_key(obj, _JSON_AMT_KEYS)
+    raw_ccy = _json_first_key(obj, _JSON_CCY_KEYS)
+    # Monzo/Starling-стиль: сума/валюта у вкладеному об'єкті
+    if isinstance(raw_amt, dict):
+        raw_ccy = raw_ccy if raw_ccy is not None else raw_amt.get("currency")
+        raw_amt = raw_amt.get("value", raw_amt.get("amount"))
+    if raw_date is None or raw_amt is None:
+        return None
+    d = _parse_date(str(raw_date))
+    if d is None:
+        return None
+    amt = _parse_amount(str(raw_amt))
+    if amt is None:
+        return None
+    desc = str(raw_desc).strip() if raw_desc is not None else ""
+    ccy = str(raw_ccy).strip().upper() if raw_ccy is not None else "USD"
+    if not re.fullmatch(r"[A-Z]{3}", ccy):
+        ccy = "USD"
+    return Txn(d, desc, amt, ccy)
+
+
+def parse_json_statement(text: str) -> list[Txn]:
+    """Parse a bank statement exported as JSON into (date, description,
+    amount, currency) rows. Accepts a bare list of transaction objects or
+    one of the common wrapper shapes ({"transactions": [...]},
+    {"statement": {"transactions": [...]}}, {"data": [...]}).
+    Raises ValueError when the document holds no usable transactions."""
+    try:
+        doc = json.loads(text)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"invalid JSON: {e.msg} (line {e.lineno})") from None
+    rows = doc
+    for key in _JSON_CONTAINERS:      # unwrap one or two nesting levels
+        if isinstance(rows, dict) and key in rows:
+            inner = rows[key]
+            rows = (inner.get("transactions", inner)
+                    if isinstance(inner, dict) and
+                    not isinstance(inner, list) else inner)
+    if not isinstance(rows, list):
+        raise ValueError("JSON statement: no transaction list found")
+    out = []
+    for obj in rows:
+        if isinstance(obj, dict):
+            t = _json_txn_from(obj)
+            if t is not None:
+                out.append(t)
+    if not out:
+        raise ValueError("no parsable (date, amount) rows in JSON statement")
+    return out
+
+
+def _looks_like_json(text: str) -> bool:
+    stripped = text.lstrip("﻿").lstrip()
+    return stripped[:1] in ("[", "{")
+
+
+def parse_statement(text: str, preset_name: str | None = None) -> list[Txn]:
+    """Format-agnostic entry point: JSON documents go to the JSON parser,
+    everything else (CSV/TSV/...) to parse_csv()."""
+    if _looks_like_json(text):
+        return parse_json_statement(text)
+    return parse_csv(text, preset_name)
 
 
 # --- detection ---------------------------------------------------------------
