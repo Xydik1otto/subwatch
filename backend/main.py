@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import alerts as alerts_mod, cancel_kb, csvimport, demo as demo_mod, family, history, ics, projection as projection_mod, rates, schedule, tags as tags_mod
+from . import alerts as alerts_mod, cancel_kb, csvimport, demo as demo_mod, family, history, ics, native_accel, projection as projection_mod, rates, schedule, tags as tags_mod
 from .db import DB_PATH, connect
 
 app = FastAPI(title="subwatch", version="1.0.0",
@@ -487,11 +487,10 @@ def import_analyze(body: ImportAnalyzeIn):
     bank's known column names instead of guessing.
     """
     try:
-        txns = csvimport.parse_csv(body.csv, body.preset)
+        txns, candidates = native_accel.parse_and_detect(body.csv, body.preset)
     except ValueError as e:
         raise HTTPException(422, str(e))
-    return {"parsed_rows": len(txns),
-            "candidates": csvimport.detect_recurring(txns)}
+    return {"parsed_rows": len(txns), "candidates": candidates}
 
 
 @app.post("/api/import/confirm")

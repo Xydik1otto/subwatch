@@ -168,7 +168,7 @@ public static partial class CsvParse
     /// Auto-detects the delimiter, an optional header row, the date format and
     /// the amount format (EU decimal commas, currency symbols, negatives).
     /// Raises FormatException when the file does not contain a usable statement.</summary>
-    public static List<Txn> ParseCsv(string text)
+    public static List<Txn> ParseCsv(string text, bool canonical = false)
     {
         text = text.TrimStart('\ufeff');
         var lines = text.Split(LineSeps).Where(ln => ln.Length > 0).ToList();
@@ -179,7 +179,14 @@ public static partial class CsvParse
 
         int colDate = -1, colDesc = -1, colAmt = -1, colCcy = -1;
         int start = 0;
-        if (LooksLikeHeader(rows[0]))
+        if (canonical)
+        {
+            // native_accel feeds the CLI in fixed order (with an explicit
+            // currency column, unlike the generic Python header guessing).
+            colDate = 0; colDesc = 1; colAmt = 2; colCcy = 3;
+            start = 1;
+        }
+        else if (LooksLikeHeader(rows[0]))
         {
             var header = rows[0].Select(c => c.Trim().ToLowerInvariant()).ToList();
             for (int i = 0; i < header.Count; i++)

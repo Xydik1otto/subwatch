@@ -26,6 +26,7 @@ if (args.Contains("--help") || args.Contains("-h"))
 
 int minOcc = Detect.MinOccurrences;
 int tol = Detect.DateTolerance;
+bool canonical = false;
 for (int i = 0; i < args.Length - 1; i++)
 {
     switch (args[i])
@@ -37,6 +38,8 @@ for (int i = 0; i < args.Length - 1; i++)
             return 1;
     }
 }
+if (args.Contains("--canonical"))
+    canonical = true;
 if (args.Length % 2 == 1)
 {
     Console.Error.WriteLine("error: missing value for the last argument");
@@ -50,7 +53,7 @@ using (var reader = new StreamReader(Console.OpenStandardInput(), new UTF8Encodi
 List<Txn> txns;
 try
 {
-    txns = CsvParse.ParseCsv(input);
+    txns = CsvParse.ParseCsv(input, canonical);
 }
 catch (FormatException ex)
 {
