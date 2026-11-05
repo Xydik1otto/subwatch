@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import cancel_kb, csvimport, history, ics, projection as projection_mod, rates, schedule, tags as tags_mod
+from . import alerts as alerts_mod, cancel_kb, csvimport, history, ics, projection as projection_mod, rates, schedule, tags as tags_mod
 from .db import DB_PATH, connect
 
 app = FastAPI(title="subwatch", version="0.4.0",
@@ -152,6 +152,9 @@ def update_subscription(sub_id: int, body: SubscriptionIn):
         )
         if old_row["amount"] != body.amount:
             history.record_amount(conn, sub_id, body.amount)
+            # price-change alert (outbox): the user must notice the increase
+            alerts_mod.record_alert(conn, sub_id, old_row["amount"],
+                                    body.amount, body.currency.upper())
     row = conn.execute("SELECT * FROM subscriptions WHERE id = ?", (sub_id,)).fetchone()
     return _row_dict(row)
 
@@ -531,6 +534,39 @@ def subscription_cancel_guide(sub_id: int):
         raise HTTPException(404, "no cancel-assistant guide for this service name")
     return {"subscription_id": sub_id, "matched_name": row["name"],
             "service_id": sid, **cancel_kb.guide(sid)}
+
+
+# --- price-change alerts (outbox) -----------------------------------------------
+
+@app.get("/api/alerts")
+def list_alerts(unseen_only: bool = True):
+    """Price-change alerts; by default only unseen ones (the outbox)."""
+    conn = get_conn()
+    return alerts_mod.list_alerts(conn, unseen_only=unseen_only)
+
+
+@app.get("/api/alerts/count")
+def alert_count():
+    """Number of unseen alerts — drives the UI badge."""
+    return {"unseen": alerts_mod.unseen_count(get_conn())}
+
+
+@app.post("/api/alerts/{alert_id}/seen")
+def alert_seen(alert_id: int):
+    conn = get_conn()
+    with conn:
+        ok = alerts_mod.mark_seen(conn, alert_id)
+    if not ok:
+        raise HTTPException(404, "alert not found")
+    return {"id": alert_id, "seen": True}
+
+
+@app.post("/api/alerts/seen-all")
+def alerts_seen_all():
+    conn = get_conn()
+    with conn:
+        marked = alerts_mod.mark_all_seen(conn)
+    return {"marked": marked}
 
 
 # --- price history -------------------------------------------------------------

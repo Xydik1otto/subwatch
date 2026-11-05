@@ -32,8 +32,22 @@ CREATE TABLE IF NOT EXISTS price_history (
     changed_at      TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS alerts (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    subscription_id INTEGER NOT NULL
+                    REFERENCES subscriptions(id) ON DELETE CASCADE,
+    old_amount      REAL NOT NULL,
+    new_amount      REAL NOT NULL,
+    currency        TEXT NOT NULL,
+    created_at      TEXT NOT NULL,
+    seen            INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE INDEX IF NOT EXISTS idx_price_history_sub
     ON price_history(subscription_id);
+
+CREATE INDEX IF NOT EXISTS idx_alerts_seen
+    ON alerts(seen, created_at);
 """
 
 # Columns added after the MVP schema; existing DBs are migrated on connect.

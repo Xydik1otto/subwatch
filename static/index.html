@@ -30,10 +30,14 @@
   .logo { font-size: 1.3rem; margin-right: .3rem; }
   .paused td { color: #888; }
   .due { font-weight: 600; }
+  .alert-badge { background: #e63946; color: #f1faee; border-radius: 999px;
+    padding: .05rem .55rem; font-size: .85rem; vertical-align: middle; }
+  .priceup td { background: #fff7e6; }
+  .priceup .price-mark { color: #b45309; font-weight: 700; white-space: nowrap; }
 </style>
 </head>
 <body>
-<h1>subwatch</h1>
+<h1>subwatch <span id="alert-badge" class="alert-badge" hidden aria-label="Нові алерти зміни ціни"></span></h1>
 <p>Локальний трекер підписок. Дані — лише у вашому SQLite. <a href="/api/export.ics">Експорт .ics</a></p>
 <div class="cards" id="cards"></div>
 
@@ -86,6 +90,7 @@ function emoji(sub) {
 // --- фільтр paused/active + рендер таблиці ---
 let filter = 'all';
 let lastSubs = null;
+let unseenAlertIds = new Set();
 function drawSubs(subs) {
   lastSubs = subs;
   const visible = subs.filter(x =>
@@ -93,12 +98,15 @@ function drawSubs(subs) {
   document.getElementById('subs').innerHTML =
     '<tr><th></th><th>Назва</th><th>Сума</th><th>Цикл</th><th>Наступне списання</th><th>Тріал</th><th>Статус</th></tr>' +
     (visible.map(x => {
+      const alerted = unseenAlertIds.has(x.id);
       const cls = x.cancel_planned ? ' class="tocancel"'
+                : (alerted ? ' class="priceup"'
                 : (x.trial_end_date ? ' class="warn"'
-                : (x.paused ? ' class="paused"' : ''));
+                : (x.paused ? ' class="paused"' : '')));
       const badge = x.cancel_planned
         ? `<span class="badge">⛔ скасувати до ${x.cancel_deadline}</span>`
-        : (x.paused ? '⏸ пауза' : '');
+        : (alerted ? '<span class="price-mark">↑ ціна змінилась</span>'
+        : (x.paused ? '⏸ пауза' : ''));
       return `<tr${cls}><td><span class="logo">${emoji(x)}</span></td>` +
       `<td>${x.name}</td><td>${money(x.amount, x.currency)}</td><td>${x.cycle}</td>` +
       `<td class="due">${x.next_due_date}</td>` +
@@ -133,6 +141,16 @@ document.getElementById('cancel-show').addEventListener('click', async () => {
 });
 loadCancelAssistant();
 
+// --- алерти зміни ціни: бейдж із кількістю непрочитаних + мітка в рядку ---
+async function loadAlerts() {
+  const alerts = await (await fetch('/api/alerts?unseen_only=true')).json();
+  unseenAlertIds = new Set(alerts.map(a => a.subscription_id));
+  const badge = document.getElementById('alert-badge');
+  badge.hidden = alerts.length === 0;
+  badge.textContent = alerts.length ? `🔔 ${alerts.length}` : '';
+  if (lastSubs) drawSubs(lastSubs);
+}
+
 async function load() {
   const s = await (await fetch('/api/summary')).json();
   const monthly = Object.entries(s.monthly_by_currency).map(([c, v]) => money(v, c)).join(' + ') || '—';
@@ -156,6 +174,7 @@ async function load() {
      '<tr><td colspan="4">нічого</td></tr>');
 }
 load();
+loadAlerts();
 // --- PWA: service worker + web notifications про списання сьогодні ---
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/static/sw.js').catch(() => {});
