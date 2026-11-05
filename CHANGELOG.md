@@ -1,0 +1,53 @@
+# Changelog
+
+Формат базується на [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+і проєкт дотримується [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.4.0] - 2026-11-05
+
+### Added
+- PWA: manifest + service worker, web notifications про списання сьогодні.
+- Cancellation workflow: статус «plan to cancel» з дедлайном → ICS-подія
+  «Cancel before» + червона мітка в UI.
+- Аналітика витрат по тегах: зведення за категорією за місяць (SVG pie).
+- CSV-пресети банків: Revolut / Wise (мапінг колонок за замовчуванням).
+- UI: emoji-лого карток підписок, виділена картка total, фільтр paused/active.
+- `CHANGELOG.md`, `FUNDING.yml`, favicon + OG-мета, `scripts/smoke.sh`.
+
+## [0.3.0] - 2026-11-04
+
+### Added
+- Мультивалютність: конвертація через довідкові курси ECB (дисковий кеш,
+  толерантний до відсутності мережі), `?base=` на `/api/summary`.
+- Дашборд «worst offenders»: топ-N підписок за monthly-equivalent
+  з часткою в межах власної валюти.
+- Pause/unpause підписок: видимі у списку, але виключені з підсумків,
+  upcoming, ICS та нагадувань.
+
+## [0.2.0] - 2026-10-28
+
+### Added
+- Історія цін: кожна зміна amount записується, людяні підсумки
+  (`Netflix: 15.49→16.99 (+9.7% за 8 міс)`).
+- Cost-per-use: вартість одного використання (`times_used_per_month`).
+- Річна проєкція: зведення фактичних списань по календарних місяцях
+  + SVG-графік (`/api/projection`, `/api/projection.svg`).
+
+## [0.1.0-alpha] - 2026-10-20
+
+### Added
+- CRUD підписок, monthly-equivalent, річний перерахунок.
+- Правильні дати: month-end якір (Jan 31 → Feb 28/29 → Mar 31),
+  високосні роки, custom-цикли в днях.
+- Календар списань 30/60/90 днів, CLI-нагадування (`python -m backend.remind`),
+  ICS-експорт (RFC 5545), тріал-трекер.
+- CSV-імпорт виписки з авто-детекцією повторюваних платежів
+  (7/14/30/31/365 днів ±2) → кандидати на підтвердження.
+
+[Unreleased]: https://github.com/bigpi/subwatch/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/bigpi/subwatch/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/bigpi/subwatch/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/bigpi/subwatch/compare/v0.1.0-alpha...v0.2.0
+[0.1.0-alpha]: https://github.com/bigpi/subwatch/releases/tag/v0.1.0-alpha
