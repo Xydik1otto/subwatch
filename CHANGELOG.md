@@ -6,6 +6,11 @@
 ## [Unreleased]
 
 ### Added
+- **Spending trends по місяцях**: `backend/trends.py` + `GET /api/trends?months=N`
+  — фактичні списання за останні N місяців (дзеркало projection, але назад),
+  помісячні суми по валютах (валюти не змішуються), середнє за вікно,
+  `delta_pct` і напрямок тренду останнього місяця проти середнього
+  (up/flat/down, поріг ±5%).
 - **Імпорт виписок у форматі JSON** (поряд із CSV): `parse_json_statement()`
   і формат-агностичний `parse_statement()` у `backend/csvimport.py`;
   `/api/import/analyze` автоматично розпізнає JSON (список об'єктів,

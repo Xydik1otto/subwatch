@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import alerts as alerts_mod, cancel_kb, cancel_reminder, csvimport, demo as demo_mod, family, history, ics, native_accel, projection as projection_mod, rates, schedule, tags as tags_mod
+from . import alerts as alerts_mod, cancel_kb, cancel_reminder, csvimport, demo as demo_mod, family, history, ics, native_accel, projection as projection_mod, rates, schedule, tags as tags_mod, trends as trends_mod
 from .db import DB_PATH, connect
 
 app = FastAPI(title="subwatch", version="1.0.0",
@@ -467,6 +467,31 @@ def projection_svg(months: int = 12):
     ccy = projection_mod.primary_currency(proj) or "USD"
     svg = projection_mod.build_svg(proj, ccy)
     return Response(content=svg, media_type="image/svg+xml")
+
+
+# --- spending trends: останні N місяців -----------------------------------------
+
+@app.get("/api/trends")
+def spending_trends(months: int = 6, today: str | None = None):
+    """Spending trends по місяцях: фактичні списання за останні `months`
+    місяців (включно з поточним) + середнє і тренд останнього місяця
+    проти середнього. `today` (YYYY-MM-DD) — override для тестів/прев'ю."""
+    if months < 1 or months > 36:
+        raise HTTPException(422, "months must be between 1 and 36")
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT * FROM subscriptions WHERE active = 1 AND paused = 0").fetchall()
+    as_of = dt.date.fromisoformat(today) if today else dt.date.today()
+    trends = trends_mod.monthly_trends(rows, as_of, months)
+    return {
+        "months": trends,
+        "summary": trends_mod.trend_summary(trends),
+        "primary_currency": (max(((ccy, s["window_total"])
+                                  for ccy, s in trends_mod.trend_summary(
+                                      trends)["per_currency"].items()),
+                                 key=lambda kv: kv[1],
+                                 default=(None, 0))[0]),
+    }
 
 
 # --- tag analytics ---------------------------------------------------------------
