@@ -440,6 +440,7 @@ def tag_analytics_svg():
 
 class ImportAnalyzeIn(BaseModel):
     csv: str
+    preset: str | None = None   # 'revolut' | 'wise' — див. GET /api/import/presets
 
 
 class ImportCandidateIn(BaseModel):
@@ -456,11 +457,22 @@ class ImportConfirmIn(BaseModel):
     candidates: list[ImportCandidateIn]
 
 
+@app.get("/api/import/presets")
+def import_presets():
+    """Known bank statement presets (column mappings by default)."""
+    return [{"id": pid, "label": p["label"], "columns": p["columns"]}
+            for pid, p in csvimport.PRESETS.items()]
+
+
 @app.post("/api/import/analyze")
 def import_analyze(body: ImportAnalyzeIn):
-    """Parse a bank CSV and return recurring-payment candidates."""
+    """Parse a bank CSV and return recurring-payment candidates.
+
+    With `preset` ('revolut'/'wise') the header row is matched against the
+    bank's known column names instead of guessing.
+    """
     try:
-        txns = csvimport.parse_csv(body.csv)
+        txns = csvimport.parse_csv(body.csv, body.preset)
     except ValueError as e:
         raise HTTPException(422, str(e))
     return {"parsed_rows": len(txns),

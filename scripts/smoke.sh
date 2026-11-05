@@ -40,6 +40,7 @@ check /api/upcoming 'charge'
 check /api/export.ics 'BEGIN:VCALENDAR'
 check /api/worst-offenders 'Netflix'
 check /api/projection 'months'
+check /api/import/presets 'revolut'
 check / 'og:title'
 
 kill "$srv" 2>/dev/null

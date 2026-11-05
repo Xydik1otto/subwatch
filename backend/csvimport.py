@@ -34,6 +34,34 @@ class Txn:
     date: dt.date
     description: str
     amount: float
+    currency: str = "USD"
+
+
+# --- bank presets -------------------------------------------------------------
+# Column mappings for well-known bank statement exports. Each preset maps the
+# canonical fields (date/description/amount/currency) to a list of possible
+# header names (matched case-insensitively, exact match preferred).
+
+PRESETS: dict[str, dict] = {
+    "revolut": {
+        "label": "Revolut (statement CSV)",
+        "columns": {
+            "date": ["completed date", "started date"],
+            "description": ["description"],
+            "amount": ["amount"],
+            "currency": ["currency"],
+        },
+    },
+    "wise": {
+        "label": "Wise / TransferWise (statement CSV)",
+        "columns": {
+            "date": ["date"],
+            "description": ["description"],
+            "amount": ["amount"],
+            "currency": ["currency"],
+        },
+    },
+}
 
 
 # --- parsing -----------------------------------------------------------------
@@ -51,6 +79,10 @@ _DATE_FORMATS = (
 
 def _parse_date(value: str) -> dt.date | None:
     v = value.strip().strip('"').strip("'")
+    # Timestamps ('2024-06-01 10:30:44', '2024-06-01T10:30'): keep the date part.
+    m = re.match(r"^(\d{4}-\d{2}-\d{2})[ T]", v)
+    if m:
+        v = m.group(1)
     for fmt in _DATE_FORMATS:
         try:
             return dt.datetime.strptime(v, fmt).date()
@@ -124,23 +156,51 @@ def _column_scores(rows: list[list[str]]):
     return date_hits, num_hits
 
 
-def parse_csv(text: str) -> list[Txn]:
+def _preset_columns(header: list[str], columns: dict[str, list[str]]) -> dict[str, int]:
+    """Match preset alias lists against the header row -> column indexes."""
+    lowered = [c.strip().lower() for c in header]
+    out: dict[str, int] = {}
+    for field, aliases in columns.items():
+        idx = next((i for i, h in enumerate(lowered) if h in aliases), None)
+        if idx is None:   # fallback: substring match
+            idx = next((i for i, h in enumerate(lowered)
+                        if any(a in h for a in aliases)), None)
+        if idx is not None:
+            out[field] = idx
+    return out
+
+
+def parse_csv(text: str, preset_name: str | None = None) -> list[Txn]:
     """Parse a bank/CSV statement into (date, description, amount) rows.
 
     Auto-detects the delimiter, an optional header row, the date format and
     the amount format (EU decimal commas, currency symbols, negatives).
+    With `preset_name` (see PRESETS — 'revolut', 'wise') the header row is
+    matched against the bank's known column names instead of guessing.
     Raises ValueError when the file does not contain a usable statement.
     """
-    text = text.lstrip("\ufeff")
+    text = text.lstrip("﻿")
     lines = [ln for ln in text.splitlines() if ln.strip()]
     if len(lines) < 2:
         raise ValueError("CSV needs at least 2 non-empty lines")
     delim = _sniff_delimiter(lines[0])
     rows = [next(csv.reader([ln], delimiter=delim)) for ln in lines]
 
-    col_date = col_desc = col_amt = None
+    col_date = col_desc = col_amt = col_ccy = None
     start = 0
-    if _looks_like_header(rows[0]):
+    if preset_name:
+        if preset_name not in PRESETS:
+            raise ValueError(f"unknown preset: {preset_name}")
+        cols = _preset_columns(rows[0], PRESETS[preset_name]["columns"])
+        if "date" not in cols or "amount" not in cols:
+            raise ValueError(
+                f"preset '{preset_name}': no matching date/amount columns "
+                "in the header row")
+        col_date, col_amt = cols["date"], cols["amount"]
+        col_desc = cols.get("description")
+        col_ccy = cols.get("currency")
+        start = 1
+    elif _looks_like_header(rows[0]):
         header = [c.strip().lower() for c in rows[0]]
         for i, h in enumerate(header):
             if col_date is None and any(k in h for k in _DATE_HINTS):
@@ -181,7 +241,11 @@ def parse_csv(text: str) -> list[Txn]:
             continue
         desc = (row[col_desc].strip() if col_desc is not None and
                 col_desc < len(row) else "")
-        out.append(Txn(d, desc, amt))
+        ccy = (row[col_ccy].strip().upper() if col_ccy is not None and
+               col_ccy < len(row) else "USD")
+        if not re.fullmatch(r"[A-Z]{3}", ccy):
+            ccy = "USD"
+        out.append(Txn(d, desc, amt, ccy))
     if not out:
         raise ValueError("no parsable (date, amount) rows in CSV")
     return out
@@ -233,13 +297,17 @@ def detect_recurring(txns: list[Txn], min_occurrences: int = MIN_OCCURRENCES,
         med_amount = statistics.median(amounts)
         if max(amounts) - min(amounts) > max(0.02, AMOUNT_TOLERANCE * med_amount):
             continue
+        currencies = [t.currency for t in group]
+        ccy = max(set(currencies), key=currencies.count).upper()
+        if not re.fullmatch(r"[A-Z]{3}", ccy):
+            ccy = "USD"
         next_due, cycle, custom_days = _next_due(group[-1].date, period)
         labels = [t.description.strip() for t in group]
         candidates.append({
             "name": max(set(labels), key=labels.count)[:60],
             "description": max(set(labels), key=labels.count),
             "amount": round(med_amount, 2),
-            "currency": "USD",
+            "currency": ccy,
             "cycle": cycle,
             "custom_days": custom_days,
             "next_due_date": next_due.isoformat(),
