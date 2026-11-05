@@ -14,7 +14,8 @@ def collect(days: int, db_path: str | None = None):
     from . import schedule
     conn = connect(db_path)
     rows = conn.execute(
-        "SELECT * FROM subscriptions WHERE active = 1 ORDER BY next_due_date"
+        "SELECT * FROM subscriptions WHERE active = 1 AND paused = 0 "
+        "ORDER BY next_due_date"
     ).fetchall()
     today = dt.date.today()
     charges, trials = [], []

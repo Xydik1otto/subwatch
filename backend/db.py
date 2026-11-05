@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     tags           TEXT,
     active         INTEGER NOT NULL DEFAULT 1,
     times_used_per_month REAL,
+    paused         INTEGER NOT NULL DEFAULT 0,
     CHECK (cycle != 'custom' OR (custom_days IS NOT NULL AND custom_days > 0))
 );
 
@@ -38,6 +39,7 @@ CREATE INDEX IF NOT EXISTS idx_price_history_sub
 # Columns added after the MVP schema; existing DBs are migrated on connect.
 _EXTRA_SUBSCRIPTION_COLUMNS: dict[str, str] = {
     "times_used_per_month": "REAL",
+    "paused": "INTEGER NOT NULL DEFAULT 0",
 }
 
 

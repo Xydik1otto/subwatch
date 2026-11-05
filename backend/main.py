@@ -47,6 +47,7 @@ def _row_dict(r) -> dict:
     uses = d.get("times_used_per_month")
     d["cost_per_use"] = (round(d["monthly_equivalent"] / uses, 4)
                          if uses and uses > 0 else None)
+    d["paused"] = bool(d.get("paused"))
     return d
 
 
@@ -97,9 +98,36 @@ def list_subscriptions(sort: str = "next_due_date"):
         "monthly": "amount * CASE cycle WHEN 'monthly' THEN 1 WHEN 'yearly' THEN 1.0/12 ELSE 30.4375/custom_days END DESC",
         "name": "name COLLATE NOCASE ASC",
     }.get(sort, "next_due_date ASC")
+    # Paused subscriptions stay visible but sort to the bottom of the list.
     rows = conn.execute(
-        f"SELECT * FROM subscriptions WHERE active = 1 ORDER BY {order}").fetchall()
+        f"SELECT * FROM subscriptions WHERE active = 1 "
+        f"ORDER BY paused ASC, {order}").fetchall()
     return [_row_dict(r) for r in rows]
+
+
+@app.post("/api/subscriptions/{sub_id}/pause")
+def pause_subscription(sub_id: int):
+    """Freeze a subscription: visible in the list, excluded from totals,
+    upcoming calendar, ICS export and reminders until unpaused."""
+    return _set_paused(sub_id, 1)
+
+
+@app.post("/api/subscriptions/{sub_id}/unpause")
+def unpause_subscription(sub_id: int):
+    return _set_paused(sub_id, 0)
+
+
+def _set_paused(sub_id: int, paused: int):
+    conn = get_conn()
+    if not conn.execute("SELECT 1 FROM subscriptions WHERE id = ?",
+                        (sub_id,)).fetchone():
+        raise HTTPException(404, "subscription not found")
+    with conn:
+        conn.execute("UPDATE subscriptions SET paused = ? WHERE id = ?",
+                     (paused, sub_id))
+    row = conn.execute("SELECT * FROM subscriptions WHERE id = ?",
+                       (sub_id,)).fetchone()
+    return {"id": sub_id, "paused": bool(row["paused"])}
 
 
 @app.patch("/api/subscriptions/{sub_id}")
@@ -158,17 +186,22 @@ def summary(base: str | None = None):
     """Totals per currency; with ?base=USD/EUR/... everything is converted
     through ECB reference rates (cached, stale-tolerant)."""
     conn = get_conn()
-    rows = conn.execute("SELECT * FROM subscriptions WHERE active = 1").fetchall()
+    rows = conn.execute(
+        "SELECT * FROM subscriptions WHERE active = 1 AND paused = 0").fetchall()
     by_ccy: dict[str, float] = {}
     for r in rows:
         by_ccy[r["currency"]] = by_ccy.get(r["currency"], 0.0) + \
             schedule.monthly_equivalent(r["amount"], r["cycle"], r["custom_days"])
     today = dt.date.today()
     next_due = conn.execute(
-        "SELECT * FROM subscriptions WHERE active = 1 "
+        "SELECT * FROM subscriptions WHERE active = 1 AND paused = 0 "
         "ORDER BY next_due_date ASC LIMIT 1").fetchone()
+    paused_count = conn.execute(
+        "SELECT COUNT(*) AS n FROM subscriptions WHERE active = 1 AND paused = 1"
+    ).fetchone()["n"]
     out = {
         "active_count": len(rows),
+        "paused_count": paused_count,
         "monthly_by_currency": {k: round(v, 2) for k, v in sorted(by_ccy.items())},
         "yearly_by_currency": {k: round(v * 12, 2) for k, v in sorted(by_ccy.items())},
         "next_due": _row_dict(next_due) if next_due else None,
@@ -197,7 +230,8 @@ def summary(base: str | None = None):
 def upcoming(days: int = 30):
     """Charges (and trial ends) within `days` from today."""
     conn = get_conn()
-    rows = conn.execute("SELECT * FROM subscriptions WHERE active = 1").fetchall()
+    rows = conn.execute(
+        "SELECT * FROM subscriptions WHERE active = 1 AND paused = 0").fetchall()
     today = dt.date.today()
     out = []
     for r in rows:
@@ -238,7 +272,8 @@ def trials(warn_days: int = TRIAL_WARN_DAYS):
 @app.get("/api/export.ics")
 def export_ics(days: int = 90):
     conn = get_conn()
-    rows = conn.execute("SELECT * FROM subscriptions WHERE active = 1").fetchall()
+    rows = conn.execute(
+        "SELECT * FROM subscriptions WHERE active = 1 AND paused = 0").fetchall()
     data = ics.build_ics(ics.subscription_events(rows, days))
     return Response(content=data, media_type="text/calendar",
                     headers={"Content-Disposition":
@@ -255,7 +290,8 @@ def worst_offenders(limit: int = 5):
     currency, since totals of different currencies are never mixed.
     """
     conn = get_conn()
-    rows = conn.execute("SELECT * FROM subscriptions WHERE active = 1").fetchall()
+    rows = conn.execute(
+        "SELECT * FROM subscriptions WHERE active = 1 AND paused = 0").fetchall()
     items = [_row_dict(r) for r in rows]
     totals: dict[str, float] = {}
     for it in items:
