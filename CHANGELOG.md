@@ -18,6 +18,14 @@
   `tests/test_native_parity.py`). `SUBWATCH_NATIVE=off` вимикає нативний шлях.
 - `scripts/benchmark_native.py`: заміри Python vs нативний рушій на
   синтетичній виписці 50 000 рядків (~0.74 с проти ~0.36 с, ≈2×).
+- **Мобільні оболонки (гілка `mobile/android-ios`)**: Capacitor 6 —
+  splash-екран з адресою свого сервера (`@capacitor/preferences`),
+  пуш-нотифікації про сьогоднішні списання (той самий потік `/api/today`,
+  що в PWA; у нативній оболонці — `@capacitor/local-notifications`),
+  Android (minSdk 24 / targetSdk 35, єдиний дозвіл INTERNET) та
+  iOS (14.0, NSAppTransportSecurity для LAN); CI-збірки
+  `android-build.yml` (APK) і `ios-build.yml` (unsigned, для
+  AltStore/Sideloadly); гайд — [MOBILE.md](MOBILE.md).
 
 ### Changed
 - Детекція стала детермінованою: `name`/`description`/валюта кандидата при

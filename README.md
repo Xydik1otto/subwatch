@@ -193,6 +193,18 @@ Apple Calendar, і нагадування прийдуть туди, де ви �
 3. **Monthly-equivalent** — чесна нормалізація yearly (÷12) і custom-циклів
    (через 365.25/днів), щоб порівнювати підписки між собою.
 
+## Мобільні застосунки
+
+Мобільні оболонки (Capacitor 6) — на гілці
+[`mobile/android-ios`](https://github.com/xydik1otto/subwatch/tree/mobile/android-ios):
+Android APK з CI ([Releases](https://github.com/xydik1otto/subwatch/releases)
+та артефакти [Actions → android-build](https://github.com/xydik1otto/subwatch/actions/workflows/android-build.yml))
+і unsigned iOS-збірка для AltStore/Sideloadly
+([Actions → ios-build](https://github.com/xydik1otto/subwatch/actions/workflows/ios-build.yml)).
+Оболонка підключається до **вашого сервера** (адреса на splash-екрані) і
+показує пуш-нотифікації про сьогоднішні списання. Гайд:
+[MOBILE.md](MOBILE.md) — sideload, AltStore, Tailscale, локальна збірка.
+
 ## Contributing
 
 Проєкт open-source: читайте [CONTRIBUTING.md](CONTRIBUTING.md) перед

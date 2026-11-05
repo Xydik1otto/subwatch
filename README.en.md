@@ -204,6 +204,19 @@ Apple Calendar and the reminders arrive where you already look.
 3. **Monthly-equivalent** — an honest normalisation of yearly (÷12) and
    custom cycles (365.25/days) so subscriptions can be compared fairly.
 
+## Mobile apps
+
+Mobile shells (Capacitor 6) live on the
+[`mobile/android-ios`](https://github.com/xydik1otto/subwatch/tree/mobile/android-ios)
+branch: an Android APK from CI
+([Releases](https://github.com/xydik1otto/subwatch/releases) and
+[Actions → android-build](https://github.com/xydik1otto/subwatch/actions/workflows/android-build.yml)
+artifacts) and an unsigned iOS build for AltStore/Sideloadly
+([Actions → ios-build](https://github.com/xydik1otto/subwatch/actions/workflows/ios-build.yml)).
+The shell connects to **your own server** (the address is entered on the
+splash screen) and shows push notifications about today's charges. Guide:
+[MOBILE.md](MOBILE.md) — sideload, AltStore, Tailscale, local builds.
+
 ## Contributing
 
 This project is open source: read [CONTRIBUTING.md](CONTRIBUTING.md) before
