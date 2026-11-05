@@ -1,0 +1,19 @@
+{
+  "name": "subwatch — трекер підписок",
+  "short_name": "subwatch",
+  "description": "Локальний трекер підписок: без хмари, без акаунтів, без телеметрії.",
+  "lang": "uk",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f1faee",
+  "theme_color": "#1d3557",
+  "icons": [
+    {
+      "src": "/static/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

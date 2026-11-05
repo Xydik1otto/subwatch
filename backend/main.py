@@ -226,6 +226,19 @@ def summary(base: str | None = None):
     return out
 
 
+@app.get("/api/today")
+def charges_today():
+    """Charges due today (and trials ending today) — the source for
+    web notifications about money leaving the account right now."""
+    conn = get_conn()
+    today = dt.date.today().isoformat()
+    rows = conn.execute(
+        "SELECT * FROM subscriptions WHERE active = 1 AND paused = 0 "
+        "AND (next_due_date = ? OR trial_end_date = ?)",
+        (today, today)).fetchall()
+    return [_row_dict(r) for r in rows]
+
+
 @app.get("/api/upcoming")
 def upcoming(days: int = 30):
     """Charges (and trial ends) within `days` from today."""

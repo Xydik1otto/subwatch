@@ -10,6 +10,7 @@
 <meta property="og:type" content="website">
 <meta property="og:image" content="/static/favicon.svg">
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="manifest" href="/static/manifest.webmanifest">
 <title>subwatch</title>
 <style>
   body { font-family: system-ui, sans-serif; max-width: 860px; margin: 2rem auto; padding: 0 1rem; }
@@ -64,6 +65,24 @@ async function load() {
      '<tr><td colspan="4">нічого</td></tr>');
 }
 load();
+// --- PWA: service worker + web notifications про списання сьогодні ---
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/static/sw.js').catch(() => {});
+}
+async function notifyToday() {
+  if (!('Notification' in window)) return;
+  let perm = Notification.permission;
+  if (perm === 'default') perm = await Notification.requestPermission();
+  if (perm !== 'granted') return;
+  const items = await (await fetch('/api/today')).json();
+  if (navigator.serviceWorker.controller) {
+    navigator.serviceWorker.controller.postMessage({type: 'charges-today', items});
+  } else if (items.length) {
+    new Notification(`Списань сьогодні: ${items.length}`,
+                     {body: items.map(s => `${s.name} — ${money(s.amount, s.currency)}`).join('\n')});
+  }
+}
+notifyToday();
 </script>
 </body>
 </html>
