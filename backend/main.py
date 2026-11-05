@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import csvimport, history, ics, projection as projection_mod, rates, schedule
+from . import csvimport, history, ics, projection as projection_mod, rates, schedule, tags as tags_mod
 from .db import DB_PATH, connect
 
 app = FastAPI(title="subwatch", version="0.3.0",
@@ -400,6 +400,40 @@ def projection_svg(months: int = 12):
     ccy = projection_mod.primary_currency(proj) or "USD"
     svg = projection_mod.build_svg(proj, ccy)
     return Response(content=svg, media_type="image/svg+xml")
+
+
+# --- tag analytics ---------------------------------------------------------------
+
+@app.get("/api/tags")
+def tag_analytics():
+    """Monthly spend grouped by tag (comma-separated `tags` column).
+
+    Untagged subscriptions are aggregated under the '(без тегу)' key.
+    Currencies are reported separately — never mixed.
+    """
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT * FROM subscriptions WHERE active = 1").fetchall()
+    breakdown = tags_mod.monthly_by_tag(rows)
+    untagged = next((t for t in breakdown if t["tag"] == ""), None)
+    if untagged:
+        untagged["tag"] = "(без тегу)"
+    return {
+        "tags": breakdown,
+        "primary_currency": tags_mod.primary_currency(breakdown),
+    }
+
+
+@app.get("/api/tags.svg")
+def tag_analytics_svg():
+    """SVG pie chart: share of monthly spend per tag (primary currency)."""
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT * FROM subscriptions WHERE active = 1").fetchall()
+    breakdown = tags_mod.monthly_by_tag(rows)
+    ccy = tags_mod.primary_currency(breakdown) or "USD"
+    return Response(content=tags_mod.build_svg(breakdown, ccy),
+                    media_type="image/svg+xml")
 
 
 # --- CSV import ---------------------------------------------------------------
