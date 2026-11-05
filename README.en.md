@@ -179,6 +179,19 @@ Apple Calendar and the reminders arrive where you already look.
 3. **Monthly-equivalent** — an honest normalisation of yearly (÷12) and
    custom cycles (365.25/days) so subscriptions can be compared fairly.
 
+## Contributing
+
+This project is open source: read [CONTRIBUTING.md](CONTRIBUTING.md) before
+opening a pull request (languages: Ukrainian/English; every change ships
+with a test; privacy-first). Security — [SECURITY.md](SECURITY.md);
+bug reports go through the templates in `.github/ISSUE_TEMPLATE/`.
+
+### Recommended GitHub topics
+
+`subscription-tracker` `local-first` `privacy` `self-hosted` `fastapi`
+`python` `sqlite` `personal-finance` `budget` `pwa` `offline-first`
+`selfhosted` `money-management`
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

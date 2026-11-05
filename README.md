@@ -157,6 +157,19 @@ Apple Calendar, і нагадування прийдуть туди, де ви �
 3. **Monthly-equivalent** — чесна нормалізація yearly (÷12) і custom-циклів
    (через 365.25/днів), щоб порівнювати підписки між собою.
 
+## Contributing
+
+Проєкт open-source: читайте [CONTRIBUTING.md](CONTRIBUTING.md) перед
+pull request'ом (мови спілкування — українська/англійська; кожна зміна —
+з тестом; privacy-first). Безпека — [SECURITY.md](SECURITY.md),
+баг-репорти — через шаблони у `.github/ISSUE_TEMPLATE/`.
+
+### Рекомендовані GitHub topics
+
+`subscription-tracker` `local-first` `privacy` `self-hosted` `fastapi`
+`python` `sqlite` `personal-finance` `budget` `pwa` `offline-first`
+`selfhosted` `money-management`
+
 ## Ліцензія
 
 MIT — див. [LICENSE](LICENSE).

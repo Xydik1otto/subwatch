@@ -34,7 +34,7 @@ def test_install_md_linux_systemd_user_unit(install_md):
 
 
 def test_install_md_has_no_local_filesystem_leaks(install_md):
-    # жодних приватних шляхів (G:\, C:\Users\...) у публічній документації
+    # жодних приватних шляхів (диск з проєктами, профіль користувача) у публічній документації
     assert not re.search(r"[A-Z]:\\Users", install_md)
     assert "G:" not in install_md
 
