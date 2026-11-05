@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "subwatch"
+version = "1.0.0"
+description = "Local-first subscription tracker — no cloud, no accounts, no telemetry. One SQLite file."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "subwatch contributors" }]
+keywords = ["subscriptions", "tracker", "local-first", "fastapi", "privacy"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Web Environment",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: Ukrainian",
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business :: Financial",
+]
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+subwatch = "backend.serve:main"
+
+[project.urls]
+Homepage = "https://github.com/bigpi/subwatch"
+Changelog = "https://github.com/bigpi/subwatch/blob/master/CHANGELOG.md"
+
+[tool.setuptools]
+packages = ["backend"]
+
+[tool.setuptools.package-data]
+backend = ["py.typed"]

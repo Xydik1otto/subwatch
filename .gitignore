@@ -3,3 +3,8 @@ __pycache__/
 *.db
 .venv/
 .pytest_cache/
+
+# build artifacts
+*.egg-info/
+build/
+dist/

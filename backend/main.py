@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 from . import alerts as alerts_mod, cancel_kb, csvimport, demo as demo_mod, family, history, ics, projection as projection_mod, rates, schedule, tags as tags_mod
 from .db import DB_PATH, connect
 
-app = FastAPI(title="subwatch", version="0.4.0",
+app = FastAPI(title="subwatch", version="1.0.0",
               description="Local-first subscription tracker — no cloud, no accounts")
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
