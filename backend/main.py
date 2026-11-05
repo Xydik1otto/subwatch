@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 from . import csvimport, history, ics, projection as projection_mod, rates, schedule
 from .db import DB_PATH, connect
 
-app = FastAPI(title="subwatch", version="0.1.0",
+app = FastAPI(title="subwatch", version="0.3.0",
               description="Local-first subscription tracker — no cloud, no accounts")
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"

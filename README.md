@@ -3,7 +3,7 @@
 ![tests](https://github.com/bigpi/subwatch/actions/workflows/tests.yml/badge.svg)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![python](https://img.shields.io/badge/python-3.12%2B-blue)
-![version](https://img.shields.io/badge/version-0.1.0--alpha-orange)
+![version](https://img.shields.io/badge/version-0.3.0-orange)
 
 Local-first трекер підписок. Без хмари, без акаунтів, без телеметрії —
 усі дані живуть в одному SQLite-файлі на вашому диску. Python + FastAPI.
@@ -110,6 +110,20 @@ python -m backend.remind --days 7 --notify   # + локальне вікно-н�
 `/api/export.ics` генерує RFC 5545 VCALENDAR з подією на кожне майбутнє
 списання (і на кінець тріалу) — імпортуйте в Google Calendar / Outlook /
 Apple Calendar, і нагадування прийдуть туди, де ви вже й так дивитесь.
+
+## Що нового у v0.3.0
+
+- **Мультивалютний summary через курси ECB**: `curl "localhost:8000/api/summary?base=USD"` —
+  усі валюти конвертуються через офіційні довідкові курси ЄЦБ
+  (кеш на диску, працює офлайн зі свіжого кешу).
+- **Worst offenders**: `curl "localhost:8000/api/worst-offenders?limit=5"` —
+  топ-5 підписок за місячним еквівалентом з часткою у витратах валюти.
+- **Pause**: `curl -X POST localhost:8000/api/subscriptions/1/pause` —
+  заморожена підписка видима у списку, але не рахується у totals,
+  upcoming, ICS та нагадуваннях; `/unpause` повертає назад.
+- **Annual projection**: `curl localhost:8000/api/projection` (JSON по місяцях)
+  та `curl -o projection.svg localhost:8000/api/projection.svg` —
+  SVG-графік списань на 12 місяців вперед.
 
 ## Принципи
 
