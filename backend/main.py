@@ -48,6 +48,7 @@ def _row_dict(r) -> dict:
     d["cost_per_use"] = (round(d["monthly_equivalent"] / uses, 4)
                          if uses and uses > 0 else None)
     d["paused"] = bool(d.get("paused"))
+    d["cancel_planned"] = bool(d.get("cancel_planned"))
     return d
 
 
@@ -179,6 +180,57 @@ def mark_paid(sub_id: int):
         conn.execute("UPDATE subscriptions SET next_due_date = ? WHERE id = ?",
                      (nxt.isoformat(), sub_id))
     return {"id": sub_id, "next_due_date": nxt.isoformat()}
+
+
+class PlanCancelIn(BaseModel):
+    cancel_deadline: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+
+
+@app.post("/api/subscriptions/{sub_id}/plan-cancel")
+def plan_cancel(sub_id: int, body: PlanCancelIn):
+    """Mark a subscription 'plan to cancel' with a hard deadline (the date
+    before the next charge). The deadline lands in the ICS export and gets
+    a red badge in the UI."""
+    conn = get_conn()
+    if not conn.execute("SELECT 1 FROM subscriptions WHERE id = ?",
+                        (sub_id,)).fetchone():
+        raise HTTPException(404, "subscription not found")
+    try:
+        dt.date.fromisoformat(body.cancel_deadline)   # real calendar date
+    except ValueError:
+        raise HTTPException(422, "cancel_deadline is not a real date")
+    with conn:
+        conn.execute(
+            "UPDATE subscriptions SET cancel_planned = 1, cancel_deadline = ?"
+            " WHERE id = ?", (body.cancel_deadline, sub_id))
+    row = conn.execute("SELECT * FROM subscriptions WHERE id = ?",
+                       (sub_id,)).fetchone()
+    return {"id": sub_id, "cancel_planned": True,
+            "cancel_deadline": row["cancel_deadline"]}
+
+
+@app.post("/api/subscriptions/{sub_id}/unplan-cancel")
+def unplan_cancel(sub_id: int):
+    """Clear the 'plan to cancel' status (e.g. you changed your mind)."""
+    conn = get_conn()
+    if not conn.execute("SELECT 1 FROM subscriptions WHERE id = ?",
+                        (sub_id,)).fetchone():
+        raise HTTPException(404, "subscription not found")
+    with conn:
+        conn.execute(
+            "UPDATE subscriptions SET cancel_planned = 0, cancel_deadline = NULL"
+            " WHERE id = ?", (sub_id,))
+    return {"id": sub_id, "cancel_planned": False, "cancel_deadline": None}
+
+
+@app.get("/api/to-cancel")
+def to_cancel():
+    """Everything marked 'plan to cancel', sorted by deadline."""
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT * FROM subscriptions WHERE active = 1 AND cancel_planned = 1"
+        " ORDER BY cancel_deadline ASC").fetchall()
+    return [_row_dict(r) for r in rows]
 
 
 @app.get("/api/summary")

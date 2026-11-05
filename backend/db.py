@@ -40,6 +40,8 @@ CREATE INDEX IF NOT EXISTS idx_price_history_sub
 _EXTRA_SUBSCRIPTION_COLUMNS: dict[str, str] = {
     "times_used_per_month": "REAL",
     "paused": "INTEGER NOT NULL DEFAULT 0",
+    "cancel_planned": "INTEGER NOT NULL DEFAULT 0",
+    "cancel_deadline": "TEXT",
 }
 
 

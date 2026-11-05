@@ -55,8 +55,19 @@ def subscription_events(subs: list, horizon_days: int = 90,
         dates += schedule.upcoming_dates(start, s["cycle"],
                                          s["custom_days"], horizon_days, today,
                                          anchor)
+        deadline = s["cancel_deadline"] \
+            if "cancel_deadline" in s.keys() and s["cancel_planned"] else None
+        if deadline:
+            dd = dt.date.fromisoformat(deadline)
+            if today <= dd <= today + dt.timedelta(days=horizon_days):
+                dates.append(dd)
         for i, d in enumerate(dates):
-            label = "TRIAL END" if (trial_end and d == trial_end) else "Charge"
+            if trial_end and d == trial_end:
+                label = "TRIAL END"
+            elif deadline and d == dd:
+                label = "CANCEL BEFORE"
+            else:
+                label = "Charge"
             events.append({
                 "uid": f"subwatch-{s['id']}-{d.isoformat()}-{i}@local",
                 "date": d,
