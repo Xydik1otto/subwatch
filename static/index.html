@@ -38,6 +38,8 @@
   .demo-banner { border: 1px dashed #1d3557; border-radius: 8px; padding: .8rem 1rem; margin: 1rem 0; }
   .demo-banner button { cursor: pointer; }
   :is(button, a, select, input):focus-visible { outline: 3px solid #1d3557; outline-offset: 2px; }
+  .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap; }
 </style>
 </head>
 <body>
@@ -55,21 +57,21 @@
 
 <h2 data-i18n="subs.title">Підписки (за датою списання)
   <span class="filters" id="filters" role="group">
-    <button data-f="all" class="on">Усі</button>
-    <button data-f="active">Активні</button>
-    <button data-f="paused">На паузі</button>
+    <button type="button" data-f="all" class="on">Усі</button>
+    <button type="button" data-f="active">Активні</button>
+    <button type="button" data-f="paused">На паузі</button>
   </span>
 </h2>
-<table id="subs"></table>
+<table id="subs" aria-label="Підписки"></table>
 
 <h2 data-i18n="upcoming.title">Найближчі 30 днів</h2>
-<table id="upcoming"></table>
+<table id="upcoming" aria-label="Майбутні списання"></table>
 
 <h2 data-i18n="cancel.title">Як скасувати (помічник)</h2>
 <p>
   <label for="cancel-service" data-i18n="cancel.service">Сервіс:</label>
   <select id="cancel-service" aria-label="Оберіть сервіс для інструкції скасування" data-i18n-aria="cancel.select_aria"></select>
-  <button id="cancel-show" aria-label="Показати інструкцію скасування" data-i18n="cancel.show" data-i18n-aria="cancel.show_aria">Показати</button>
+  <button type="button" id="cancel-show" aria-label="Показати інструкцію скасування" data-i18n="cancel.show" data-i18n-aria="cancel.show_aria">Показати</button>
 </p>
 <div id="cancel-guide" aria-live="polite"></div>
 
@@ -154,10 +156,10 @@ function drawSubs(subs) {
   const visible = subs.filter(x =>
     filter === 'all' ? true : (filter === 'paused' ? x.paused : !x.paused));
   document.getElementById('subs').innerHTML =
-    `<tr><th></th><th>${t('col.name')}</th><th>${t('col.amount')}</th>` +
-    `<th>${t('col.cycle')}</th><th>${t('col.next_due')}</th>` +
-    `<th>${t('col.trial')}</th><th>${t('col.status')}</th>` +
-    `<th>${t('col.payer')}</th><th>${t('col.actions')}</th></tr>` +
+    `<tr><th scope="col"></th><th scope="col">${t('col.name')}</th><th scope="col">${t('col.amount')}</th>` +
+    `<th scope="col">${t('col.cycle')}</th><th scope="col">${t('col.next_due')}</th>` +
+    `<th scope="col">${t('col.trial')}</th><th scope="col">${t('col.status')}</th>` +
+    `<th scope="col">${t('col.payer')}</th><th scope="col">${t('col.actions')}</th></tr>` +
     (visible.map(x => {
       const alerted = unseenAlertIds.has(x.id);
       const cls = x.cancel_planned ? ' class="tocancel"'
@@ -168,7 +170,7 @@ function drawSubs(subs) {
         ? `<span class="badge">${t('badge.cancel_before', {deadline: x.cancel_deadline})}</span>`
         : (alerted ? `<span class="price-mark">${t('badge.price_changed')}</span>`
         : (x.paused ? t('badge.paused') : ''));
-      return `<tr${cls}><td><span class="logo">${emoji(x)}</span></td>` +
+      return `<tr${cls}><td><span class="logo" role="img" aria-label="${x.name}">${emoji(x)}</span></td>` +
       `<td>${x.name}</td><td>${money(x.amount, x.currency)}</td><td>${x.cycle}</td>` +
       `<td class="due">${x.next_due_date}</td>` +
       `<td>${x.trial_end_date || '—'}</td><td>${badge}</td>` +
@@ -232,7 +234,7 @@ function renderCards(s) {
 function renderUpcoming(up) {
   if (!up) return;
   document.getElementById('upcoming').innerHTML =
-    `<tr><th>${t('col.date')}</th><th>${t('col.what')}</th><th>${t('col.amount')}</th><th>${t('col.warning')}</th></tr>` +
+    `<tr><th scope="col">${t('col.date')}</th><th scope="col">${t('col.what')}</th><th scope="col">${t('col.amount')}</th><th scope="col">${t('col.warning')}</th></tr>` +
     (up.map(x =>
       `<tr${x.warning ? ' class="warn"' : ''}><td>${x.date}</td>` +
       `<td>${emoji(x.subscription)} ${x.kind === 'trial_end' ? t('kind.trial_end') : ''} ${x.subscription.name}</td>` +
