@@ -97,6 +97,30 @@ curl -X POST localhost:8000/api/import/confirm -H 'content-type: application/jso
 (`Дата/Опис/Сума`), формати дат `YYYY-MM-DD`, `DD.MM.YYYY`, `DD/MM/YYYY`,
 десяткові коми (`16,99`), тисячні пробіли (`1 234,56`), мінуси й дужки.
 
+### Нативний акселератор детекції (C#, необов'язково)
+
+Рушій детекції повторюваних платежів має C#-порт (`dotnet/SubRec`, .NET 10
+CLI `SubRec.exe`). Якщо exe зібрано, `/api/import/analyze` і
+`backend/native_accel.py` виконують весь парсинг + детекцію ним — на
+синтетичній виписці **50 000 рядків** це ~**0.4 с** проти ~**0.7 с**
+чистого Python (заміри: `python scripts/benchmark_native.py`):
+
+| шлях на 50 000 рядків            | час    |
+|----------------------------------|--------|
+| Python parse + detect            | 0.74 s |
+| SubRec.exe end-to-end            | 0.36 s |
+| `/api/import/analyze` (нативний) | 0.39 s |
+| Python detect без парсингу       | 0.12 s |
+
+Без exe (або з `SUBWATCH_NATIVE=off`) усе працює на чистому Python —
+результати ідентичні на біт (golden/fuzz-тести в `tests/test_native_parity.py`).
+
+```bash
+dotnet publish dotnet/SubRec -c Release -o dotnet/publish   # один раз
+# SubRec.exe також працює сам: stdin CSV -> stdout JSON
+./dotnet/publish/SubRec.exe < statement.csv > candidates.json
+```
+
 ### Історія цін
 
 ```bash

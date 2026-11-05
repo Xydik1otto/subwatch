@@ -122,6 +122,31 @@ The parser understands `;`/`,`/tab separators, Ukrainian and English headers
 decimal commas (`16,99`), thousands spaces (`1 234,56`), minus signs and
 brackets.
 
+### Native detection accelerator (C#, optional)
+
+The recurring-payment detection engine has a C# port (`dotnet/SubRec`,
+a .NET 10 CLI, `SubRec.exe`). When the exe is built, `/api/import/analyze`
+and `backend/native_accel.py` run the whole parse + detect pipeline through
+it — on a synthetic **50 000-row** statement that is ~**0.4 s** vs ~**0.7 s**
+for pure Python (measurements: `python scripts/benchmark_native.py`):
+
+| path on 50 000 rows              | time   |
+|----------------------------------|--------|
+| Python parse + detect            | 0.74 s |
+| SubRec.exe end-to-end            | 0.36 s |
+| `/api/import/analyze` (native)   | 0.39 s |
+| Python detect without parsing    | 0.12 s |
+
+Without the exe (or with `SUBWATCH_NATIVE=off`) everything runs on pure
+Python — results are identical (golden/fuzz tests in
+`tests/test_native_parity.py`).
+
+```bash
+dotnet publish dotnet/SubRec -c Release -o dotnet/publish   # once
+# SubRec.exe also works standalone: stdin CSV -> stdout JSON
+./dotnet/publish/SubRec.exe < statement.csv > candidates.json
+```
+
 ### Cancel assistant
 
 ```bash
