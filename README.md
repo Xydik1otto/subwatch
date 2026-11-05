@@ -3,7 +3,7 @@
 ![tests](https://github.com/bigpi/subwatch/actions/workflows/tests.yml/badge.svg)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![python](https://img.shields.io/badge/python-3.12%2B-blue)
-![version](https://img.shields.io/badge/version-0.3.0-orange)
+![version](https://img.shields.io/badge/version-0.4.0-orange)
 
 Local-first трекер підписок. Без хмари, без акаунтів, без телеметрії —
 усі дані живуть в одному SQLite-файлі на вашому диску. Python + FastAPI.
@@ -114,6 +114,22 @@ python -m backend.remind --days 7 --notify   # + локальне вікно-н�
 `/api/export.ics` генерує RFC 5545 VCALENDAR з подією на кожне майбутнє
 списання (і на кінець тріалу) — імпортуйте в Google Calendar / Outlook /
 Apple Calendar, і нагадування прийдуть туди, де ви вже й так дивитесь.
+
+## Що нового у v0.4.0
+
+- **PWA + web notifications**: manifest і service worker; коли у вас списання
+  сьогодні — системне повідомлення прямо в браузері (`GET /api/today`).
+- **Cancellation workflow**: `curl -X POST localhost:8000/api/subscriptions/1/plan-cancel -d '{"cancel_deadline":"2026-11-18"}'`
+  — статус «plan to cancel»: червона мітка в UI, подія «CANCEL BEFORE»
+  в ICS-експорті, окремий список `GET /api/to-cancel`.
+- **Аналітика по тегах**: `curl localhost:8000/api/tags` (витрати за категорією
+  за місяць) та `curl -o tags.svg localhost:8000/api/tags.svg` — SVG pie-chart.
+- **CSV-пресети банків**: `GET /api/import/presets` (revolut, wise) —
+  точний мапінг колонок замість вгадування, валюта читається з виписки:
+  `POST /api/import/analyze {"csv": "...", "preset": "revolut"}`.
+- **UI**: emoji-лого карток, виділена картка «Разом на місяць», фільтр
+  Усі / Активні / На паузі.
+- `CHANGELOG.md`, `FUNDING.yml`, favicon + OG-мета, `scripts/smoke.sh`.
 
 ## Що нового у v0.3.0
 
