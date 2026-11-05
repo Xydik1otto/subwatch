@@ -235,8 +235,14 @@ function renderUpcoming(up) {
 function renderDemoBanner(empty) {
   const el = document.getElementById('demo-banner');
   el.hidden = !empty;
-  if (empty) el.innerHTML =
-    `${t('demo.banner')} <button type="button" id="demo-seed" aria-label="${t('demo.seed')}">${t('demo.seed')}</button>`;
+  if (empty) {
+    el.innerHTML =
+      `${t('demo.banner')} <button type="button" id="demo-seed" aria-label="${t('demo.seed')}">${t('demo.seed')}</button>`;
+    document.getElementById('demo-seed').addEventListener('click', async () => {
+      await fetch('/api/demo/seed', {method: 'POST'});
+      location.reload();
+    });
+  }
 }
 
 async function load() {

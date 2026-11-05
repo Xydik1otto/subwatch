@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import alerts as alerts_mod, cancel_kb, csvimport, family, history, ics, projection as projection_mod, rates, schedule, tags as tags_mod
+from . import alerts as alerts_mod, cancel_kb, csvimport, demo as demo_mod, family, history, ics, projection as projection_mod, rates, schedule, tags as tags_mod
 from .db import DB_PATH, connect
 
 app = FastAPI(title="subwatch", version="0.4.0",
@@ -556,6 +556,22 @@ def subscription_cancel_guide(sub_id: int):
         raise HTTPException(404, "no cancel-assistant guide for this service name")
     return {"subscription_id": sub_id, "matched_name": row["name"],
             "service_id": sid, **cancel_kb.guide(sid)}
+
+
+# --- first-run demo -------------------------------------------------------------
+
+class DemoSeedOut(BaseModel):
+    created: list[int]
+    already_had_data: bool
+
+
+@app.post("/api/demo/seed")
+def demo_seed():
+    """Load demo subscriptions on an empty database (opt-in from the UI
+    banner). If data already exists, nothing is created."""
+    conn = get_conn()
+    ids = demo_mod.seed_demo(conn)
+    return DemoSeedOut(created=ids, already_had_data=ids == [])
 
 
 # --- price-change alerts (outbox) -----------------------------------------------
