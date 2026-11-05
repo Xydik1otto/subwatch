@@ -60,6 +60,8 @@ _EXTRA_SUBSCRIPTION_COLUMNS: dict[str, str] = {
     "owner": "TEXT",
     "payer": "TEXT",
     "share_pct": "REAL NOT NULL DEFAULT 100",
+    # cancel reminder: дедлайн виводиться як next_due_date - days_before
+    "cancel_days_before": "INTEGER",
 }
 
 

@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import alerts as alerts_mod, cancel_kb, csvimport, demo as demo_mod, family, history, ics, native_accel, projection as projection_mod, rates, schedule, tags as tags_mod
+from . import alerts as alerts_mod, cancel_kb, cancel_reminder, csvimport, demo as demo_mod, family, history, ics, native_accel, projection as projection_mod, rates, schedule, tags as tags_mod
 from .db import DB_PATH, connect
 
 app = FastAPI(title="subwatch", version="1.0.0",
@@ -55,6 +55,7 @@ def _row_dict(r) -> dict:
                          if uses and uses > 0 else None)
     d["paused"] = bool(d.get("paused"))
     d["cancel_planned"] = bool(d.get("cancel_planned"))
+    d["cancel_days_before"] = d.get("cancel_days_before")
     d["owner"] = d.get("owner")
     d["payer"] = d.get("payer")
     d["share_pct"] = d.get("share_pct", 100)
@@ -194,6 +195,14 @@ def mark_paid(sub_id: int):
     with conn:
         conn.execute("UPDATE subscriptions SET next_due_date = ? WHERE id = ?",
                      (nxt.isoformat(), sub_id))
+    # Cancel reminder з "N днів до списання" їде разом зі списанням:
+    # дедлайн перераховується від нового next_due_date, інакше він "старіє".
+    if row["cancel_planned"] and row["cancel_days_before"] is not None:
+        deadline = cancel_reminder.deadline_for(nxt, row["cancel_days_before"])
+        with conn:
+            conn.execute(
+                "UPDATE subscriptions SET cancel_deadline = ? WHERE id = ?",
+                (deadline.isoformat(), sub_id))
     return {"id": sub_id, "next_due_date": nxt.isoformat()}
 
 
@@ -233,9 +242,52 @@ def unplan_cancel(sub_id: int):
         raise HTTPException(404, "subscription not found")
     with conn:
         conn.execute(
-            "UPDATE subscriptions SET cancel_planned = 0, cancel_deadline = NULL"
-            " WHERE id = ?", (sub_id,))
+            "UPDATE subscriptions SET cancel_planned = 0, cancel_deadline = NULL,"
+            " cancel_days_before = NULL WHERE id = ?", (sub_id,))
     return {"id": sub_id, "cancel_planned": False, "cancel_deadline": None}
+
+
+class CancelReminderIn(BaseModel):
+    days_before: int = Field(ge=1, le=90)
+
+
+@app.post("/api/subscriptions/{sub_id}/cancel-reminder")
+def set_cancel_reminder(sub_id: int, body: CancelReminderIn):
+    """'Cancel reminder' за N днів ДО списання: дедлайн скасування
+    виводиться автоматично як next_due_date - N (і перераховується
+    при mark-paid), щоб встигнути скасувати, а не дізнатись постфактум."""
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM subscriptions WHERE id = ?",
+                       (sub_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, "subscription not found")
+    next_due = dt.date.fromisoformat(row["next_due_date"])
+    deadline = cancel_reminder.deadline_for(next_due, body.days_before)
+    with conn:
+        conn.execute(
+            "UPDATE subscriptions SET cancel_planned = 1, cancel_deadline = ?,"
+            " cancel_days_before = ? WHERE id = ?",
+            (deadline.isoformat(), body.days_before, sub_id))
+    return {"id": sub_id, "cancel_planned": True,
+            "days_before": body.days_before,
+            "cancel_deadline": deadline.isoformat(),
+            "next_due_date": row["next_due_date"]}
+
+
+@app.get("/api/cancel-reminders")
+def cancel_reminders(days: int = 7, today: str | None = None):
+    """Заплановані скасування, чий дедлайн настає протягом `days` днів —
+    список для нагадування «встигнути скасувати». `today` (YYYY-MM-DD) —
+    опціональний override для тестів/прев'ю."""
+    if days < 0:
+        raise HTTPException(422, "days must be >= 0")
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT * FROM subscriptions WHERE active = 1 AND paused = 0"
+        " AND cancel_planned = 1"
+    ).fetchall()
+    as_of = dt.date.fromisoformat(today) if today else dt.date.today()
+    return cancel_reminder.due_reminders(rows, as_of, days)
 
 
 @app.get("/api/to-cancel")

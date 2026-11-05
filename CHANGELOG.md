@@ -6,6 +6,12 @@
 ## [Unreleased]
 
 ### Added
+- **Cancel reminders за N днів до списання**: `POST
+  /api/subscriptions/{id}/cancel-reminder` виводить дедлайн скасування
+  автоматично як `next_due_date - N` (колонка `cancel_days_before`), а
+  `GET /api/cancel-reminders?days=N` — список «встигнути скасувати».
+  Дедлайн перераховується при mark-paid (їде разом зі списанням) і,
+  як і раніше, потрапляє в .ics (подія CANCEL BEFORE).
 - **Нативний акселератор детекції (C# / .NET 10)**: `dotnet/SubRec` —
   CLI-порт рушія повторюваних платежів (`parse_csv` + `detect_recurring`):
   нормалізація описів, групування, періоди 7/14/30/31/365 днів ±2,
