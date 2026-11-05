@@ -22,6 +22,13 @@
   .cards { display: flex; gap: 1rem; flex-wrap: wrap; margin: 1rem 0; }
   .card { border: 1px solid #ccc; border-radius: 8px; padding: .8rem 1.2rem; }
   .card b { display: block; font-size: 1.4rem; }
+  .card-total { border-color: #1d3557; background: #1d3557; color: #f1faee; box-shadow: 0 2px 10px rgba(29,53,87,.35); }
+  .card-total b { color: #f1faee; font-size: 1.7rem; }
+  .filters { display: inline-flex; gap: .4rem; margin-left: .75rem; vertical-align: middle; }
+  .filters button { border: 1px solid #ccc; background: #fff; border-radius: 999px; padding: .2rem .8rem; cursor: pointer; font-size: .9rem; }
+  .filters button.on { background: #1d3557; color: #f1faee; border-color: #1d3557; }
+  .logo { font-size: 1.3rem; margin-right: .3rem; }
+  .paused td { color: #888; }
   .due { font-weight: 600; }
 </style>
 </head>
@@ -30,7 +37,13 @@
 <p>Локальний трекер підписок. Дані — лише у вашому SQLite. <a href="/api/export.ics">Експорт .ics</a></p>
 <div class="cards" id="cards"></div>
 
-<h2>Підписки (за датою списання)</h2>
+<h2>Підписки (за датою списання)
+  <span class="filters" id="filters">
+    <button data-f="all" class="on">Усі</button>
+    <button data-f="active">Активні</button>
+    <button data-f="paused">На паузі</button>
+  </span>
+</h2>
 <table id="subs"></table>
 
 <h2>Найближчі 30 днів</h2>
@@ -38,35 +51,80 @@
 
 <script>
 function money(x, c) { return x.toFixed(2) + ' ' + c; }
+
+// --- emoji-лого картки: за назвою сервісу або тегом ---
+const EMOJI = [
+  [/netflix|video|відео|hbo|disney|prime/, '🎬'],
+  [/spotify|music|музик|audio|deezer|sound/, '🎧'],
+  [/youtube|twitch|stream/, '📺'],
+  [/gym|fitness|фітнес|спорт|sport|run/, '🏋️'],
+  [/icloud|cloud|хмар|dropbox|drive|storage|диск/, '☁️'],
+  [/game|gamepass|xbox|playstation|steam|epic|ігор/, '🎮'],
+  [/adobe|figma|canva|design|software|office|github/, '💻'],
+  [/ai|gpt|claude|copilot|gemini/, '🤖'],
+  [/news|журнал|press|media|підкаст/, '📰'],
+  [/food|meal|glovo|pizza|їж/, '🍕'],
+  [/bank|фінанс|finance|insurance|страх/, '💳'],
+  [/vpn|nord|proton/, '🔒'],
+  [/book|книг|audible/, '📚'],
+  [/mobile|kyivstar|vodafone|звяз/, '📱'],
+];
+function emoji(sub) {
+  const hay = ((sub.name || '') + ' ' + (sub.tags || '')).toLowerCase();
+  for (const [re, e] of EMOJI) if (re.test(hay)) return e;
+  return '📦';
+}
+
+// --- фільтр paused/active + рендер таблиці ---
+let filter = 'all';
+let lastSubs = null;
+function drawSubs(subs) {
+  lastSubs = subs;
+  const visible = subs.filter(x =>
+    filter === 'all' ? true : (filter === 'paused' ? x.paused : !x.paused));
+  document.getElementById('subs').innerHTML =
+    '<tr><th></th><th>Назва</th><th>Сума</th><th>Цикл</th><th>Наступне списання</th><th>Тріал</th><th>Статус</th></tr>' +
+    (visible.map(x => {
+      const cls = x.cancel_planned ? ' class="tocancel"'
+                : (x.trial_end_date ? ' class="warn"'
+                : (x.paused ? ' class="paused"' : ''));
+      const badge = x.cancel_planned
+        ? `<span class="badge">⛔ скасувати до ${x.cancel_deadline}</span>`
+        : (x.paused ? '⏸ пауза' : '');
+      return `<tr${cls}><td><span class="logo">${emoji(x)}</span></td>` +
+      `<td>${x.name}</td><td>${money(x.amount, x.currency)}</td><td>${x.cycle}</td>` +
+      `<td class="due">${x.next_due_date}</td>` +
+      `<td>${x.trial_end_date || '—'}</td><td>${badge}</td></tr>`;
+    }).join('') ||
+     '<tr><td colspan="7">немає підписок у цьому фільтрі</td></tr>');
+}
+document.getElementById('filters').addEventListener('click', (e) => {
+  const f = e.target && e.target.dataset && e.target.dataset.f;
+  if (!f) return;
+  filter = f;
+  document.querySelectorAll('#filters button').forEach(b =>
+    b.classList.toggle('on', b.dataset.f === f));
+  drawSubs(lastSubs || []);
+});
+
 async function load() {
   const s = await (await fetch('/api/summary')).json();
   const monthly = Object.entries(s.monthly_by_currency).map(([c, v]) => money(v, c)).join(' + ') || '—';
   document.getElementById('cards').innerHTML =
+    `<div class="card card-total" id="total-card">💳 Разом на місяць<b>${monthly}</b></div>` +
     `<div class="card">Активних<b>${s.active_count}</b></div>` +
-    `<div class="card">На місяць<b>${monthly}</b></div>` +
+    `<div class="card">На паузі<b>${s.paused_count}</b></div>` +
     `<div class="card">На рік<b>${Object.entries(s.yearly_by_currency).map(([c, v]) => money(v, c)).join(' + ') || '—'}</b></div>`;
 
   const subs = await (await fetch('/api/subscriptions')).json();
-  document.getElementById('subs').innerHTML =
-    '<tr><th>Назва</th><th>Сума</th><th>Цикл</th><th>Наступне списання</th><th>Тріал</th><th>Статус</th></tr>' +
-    (subs.map(x => {
-      const cls = x.cancel_planned ? ' class="tocancel"'
-                : (x.trial_end_date ? ' class="warn"' : '');
-      const badge = x.cancel_planned
-        ? `<span class="badge">⛔ скасувати до ${x.cancel_deadline}</span>` : '';
-      return `<tr${cls}><td>${x.name}</td>` +
-      `<td>${money(x.amount, x.currency)}</td><td>${x.cycle}</td>` +
-      `<td class="due">${x.next_due_date}</td>` +
-      `<td>${x.trial_end_date || '—'}</td><td>${badge}</td></tr>`;
-    }).join('') ||
-     '<tr><td colspan="6">порожньо — додайте через POST /api/subscriptions</td></tr>');
+  drawSubs(subs);
 
   const up = await (await fetch('/api/upcoming?days=30')).json();
   document.getElementById('upcoming').innerHTML =
     '<tr><th>Дата</th><th>Що</th><th>Сума</th><th>Попередження</th></tr>' +
     (up.map(x =>
       `<tr${x.warning ? ' class="warn"' : ''}><td>${x.date}</td>` +
-      `<td>${x.kind === 'trial_end' ? '🔚 Кінець тріалу: ' : '💳 '}${x.subscription.name}</td>` +
+      `<td>${emoji(x.subscription)} ${x.kind === 'trial_end' ? 'Кінець тріалу:' : ''} ${x.subscription.name}</td>` +
       `<td>${money(x.subscription.amount, x.subscription.currency)}</td>` +
       `<td>${x.kind === 'trial_end' && x.warning ? 'СКАСУЙТЕ ДО ЦІЄЇ ДАТИ' : ''}</td></tr>`).join('') ||
      '<tr><td colspan="4">нічого</td></tr>');
