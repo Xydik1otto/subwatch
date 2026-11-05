@@ -5,6 +5,43 @@
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-05
+
+«Готово для чужих користувачів»: запускається стороннім користувачем
+за 5 хвилин без знання коду.
+
+### Added
+- **Cancel assistant**: статична база знань топ-20 сервісів (Netflix,
+  Spotify, Disney+, Adobe, ChatGPT Plus…) — покрокові інструкції скасування
+  UA/EN + офіційні лінки на сторінки скасування
+  (`/api/cancel-assistant`, `/api/subscriptions/{id}/cancel-guide`, секція в UI).
+- **Цінові алерти**: кожна зміна amount потрапляє в outbox (`/api/alerts`),
+  бейдж 🔔 із кількістю непрочитаних і мітка «↑ ціна змінилась» у рядку
+  підписки; `seen` / `seen-all` / `count`.
+- **Family mode**: поля `owner` / `payer` / `share_pct` у підписок,
+  `/api/family` — зведення «хто платить скільки» з частками, окремо по
+  валютах; колонка «Хто платить» в UI.
+- **i18n UA/EN**: JSON-словники, перемикач UA/EN в інтерфейсі, авто-детект
+  мови браузера, збереження вибору. Російську локалізацію не додано
+  (політичне рішення) — тест-гард у `test_readme_bilingual.py` / `test_i18n.py`.
+- **First-run demo**: opt-in демо-дані на порожній БД (`POST /api/demo/seed`,
+  банер «Завантажити демо»).
+- **Експорт даних one-click**: `/api/export.json` (підписки + історія цін +
+  алерти) і `/api/export.csv`; попередження (confirm) при видаленні.
+- **A11y**: aria-label на інтерактивних елементах, `scope="col"`,
+  `role="img"` для emoji-лого, focus-visible стилі, live-регіони.
+- **Packaging**: `pyproject.toml` з повними metadata, console-script
+  `subwatch` (`SUBWATCH_HOST`/`SUBWATCH_PORT` через env, дефолт 127.0.0.1:8000),
+  `pip install -e .` працює.
+- **INSTALL.md**: покрокова інструкція для не-програміста — Windows
+  (start.bat, автозапуск у папці Startup), Linux (systemd user unit),
+  оновлення, резервна копія.
+- **README.en.md**: повний англійський README, крос-лінки UA↔EN.
+- **Open-source hygiene**: `CONTRIBUTING.md`, `SECURITY.md`, GitHub issue
+  templates (UA/EN), `.gitignore` покриває `.env`, README: Contributing +
+  рекомендовані GitHub topics; тест-скан репозиторію на витоки приватності
+  (шляхи, токени, персональні дані).
+
 ## [0.4.0] - 2026-11-05
 
 ### Added

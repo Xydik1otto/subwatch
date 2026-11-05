@@ -51,7 +51,7 @@ def test_security_md_bilingual_with_reporting_path():
 # --- privacy-leak scan -----------------------------------------------------------
 
 def test_no_windows_drive_paths_in_tracked_files(tracked_files):
-    r"""Жодних G:\ або C:\Users шляхів у файлах репозиторію."""
+    r"""Жодних шляхів типу 'диск з проєктами' чи профіль користувача у файлах репозиторію."""
     offenders = []
     for p in tracked_files:
         if p.suffix not in (".py", ".md", ".toml", ".txt", ".html", ".js",

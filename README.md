@@ -10,7 +10,7 @@
 Local-first трекер підписок. Без хмари, без акаунтів, без телеметрії —
 усі дані живуть в одному SQLite-файлі на вашому диску. Python + FastAPI.
 
-## Можливості (v0.1.0-alpha)
+## Можливості (v1.0.0)
 
 - CRUD підписок, сортування, monthly-equivalent, річний перерахунок.
 - **Правильні дати**: month-end якір (Jan 31 → Feb 28/29 → Mar 31),
@@ -116,6 +116,18 @@ python -m backend.remind --days 7 --notify   # + локальне вікно-н�
 `/api/export.ics` генерує RFC 5545 VCALENDAR з подією на кожне майбутнє
 списання (і на кінець тріалу) — імпортуйте в Google Calendar / Outlook /
 Apple Calendar, і нагадування прийдуть туди, де ви вже й так дивитесь.
+
+## Що нового у v1.0.0
+
+- **Cancel assistant**: база знань топ-20 сервісів з офіційними лінками
+  на скасування (UA/EN) — `curl localhost:8000/api/cancel-assistant`.
+- **Цінові алерти**: бейдж 🔔 і мітка «↑ ціна змінилась» при кожній зміні
+  суми (`/api/alerts`).
+- **Family mode**: хто власник, хто платить і частка
+  (`/api/family`).
+- **i18n UA/EN**, first-run демо-дані, експорт JSON/CSV, a11y,
+  `pip install -e .` з командою `subwatch`, INSTALL.md для не-програміста,
+  open-source hygiene (CONTRIBUTING/SECURITY/issue-шаблони).
 
 ## Що нового у v0.4.0
 
