@@ -273,6 +273,27 @@ def _next_due(last: dt.date, period: int):
     return last + dt.timedelta(days=period), "custom", period
 
 
+def _most_common(values: list[str]) -> str:
+    """Most frequent value; ties resolve to the first-encountered one.
+
+    Deterministic on purpose: the C# port (dotnet/SubRec) must produce
+    bit-identical candidates, so tie-breaking cannot depend on set/hash
+    iteration order.
+    """
+    counts: dict[str, int] = {}
+    order: list[str] = []
+    for v in values:
+        if v not in counts:
+            order.append(v)
+            counts[v] = 0
+        counts[v] += 1
+    best, best_n = order[0], 0
+    for v in order:
+        if counts[v] > best_n:
+            best, best_n = v, counts[v]
+    return best
+
+
 def detect_recurring(txns: list[Txn], min_occurrences: int = MIN_OCCURRENCES,
                      tol: int = DATE_TOLERANCE) -> list[dict]:
     """Find repeating charges -> confirmation candidates (sorted by amount)."""
@@ -298,14 +319,14 @@ def detect_recurring(txns: list[Txn], min_occurrences: int = MIN_OCCURRENCES,
         if max(amounts) - min(amounts) > max(0.02, AMOUNT_TOLERANCE * med_amount):
             continue
         currencies = [t.currency for t in group]
-        ccy = max(set(currencies), key=currencies.count).upper()
+        ccy = _most_common(currencies).upper()
         if not re.fullmatch(r"[A-Z]{3}", ccy):
             ccy = "USD"
         next_due, cycle, custom_days = _next_due(group[-1].date, period)
         labels = [t.description.strip() for t in group]
         candidates.append({
-            "name": max(set(labels), key=labels.count)[:60],
-            "description": max(set(labels), key=labels.count),
+            "name": _most_common(labels)[:60],
+            "description": _most_common(labels),
             "amount": round(med_amount, 2),
             "currency": ccy,
             "cycle": cycle,
