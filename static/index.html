@@ -96,7 +96,7 @@ function drawSubs(subs) {
   const visible = subs.filter(x =>
     filter === 'all' ? true : (filter === 'paused' ? x.paused : !x.paused));
   document.getElementById('subs').innerHTML =
-    '<tr><th></th><th>Назва</th><th>Сума</th><th>Цикл</th><th>Наступне списання</th><th>Тріал</th><th>Статус</th></tr>' +
+    '<tr><th></th><th>Назва</th><th>Сума</th><th>Цикл</th><th>Наступне списання</th><th>Тріал</th><th>Статус</th><th>Хто платить</th></tr>' +
     (visible.map(x => {
       const alerted = unseenAlertIds.has(x.id);
       const cls = x.cancel_planned ? ' class="tocancel"'
@@ -110,9 +110,10 @@ function drawSubs(subs) {
       return `<tr${cls}><td><span class="logo">${emoji(x)}</span></td>` +
       `<td>${x.name}</td><td>${money(x.amount, x.currency)}</td><td>${x.cycle}</td>` +
       `<td class="due">${x.next_due_date}</td>` +
-      `<td>${x.trial_end_date || '—'}</td><td>${badge}</td></tr>`;
+      `<td>${x.trial_end_date || '—'}</td><td>${badge}</td>` +
+      `<td>${x.payer ? `${x.payer}${x.share_pct != null && x.share_pct !== 100 ? ` (${x.share_pct}%)` : ''}${x.owner ? ` · ${x.owner}` : ''}` : '—'}</td></tr>`;
     }).join('') ||
-     '<tr><td colspan="7">немає підписок у цьому фільтрі</td></tr>');
+     '<tr><td colspan="8">немає підписок у цьому фільтрі</td></tr>');
 }
 document.getElementById('filters').addEventListener('click', (e) => {
   const f = e.target && e.target.dataset && e.target.dataset.f;

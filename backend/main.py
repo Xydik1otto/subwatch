@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import alerts as alerts_mod, cancel_kb, csvimport, history, ics, projection as projection_mod, rates, schedule, tags as tags_mod
+from . import alerts as alerts_mod, cancel_kb, csvimport, family, history, ics, projection as projection_mod, rates, schedule, tags as tags_mod
 from .db import DB_PATH, connect
 
 app = FastAPI(title="subwatch", version="0.4.0",
@@ -38,6 +38,10 @@ class SubscriptionIn(BaseModel):
     notes: str | None = None
     tags: str | None = None
     times_used_per_month: float | None = Field(default=None, ge=0)
+    # family mode
+    owner: str | None = None
+    payer: str | None = None
+    share_pct: float = Field(default=100, ge=0, le=100)
 
 
 def _row_dict(r) -> dict:
@@ -49,6 +53,9 @@ def _row_dict(r) -> dict:
                          if uses and uses > 0 else None)
     d["paused"] = bool(d.get("paused"))
     d["cancel_planned"] = bool(d.get("cancel_planned"))
+    d["owner"] = d.get("owner")
+    d["payer"] = d.get("payer")
+    d["share_pct"] = d.get("share_pct", 100)
     return d
 
 
@@ -78,11 +85,12 @@ def create_subscription(body: SubscriptionIn):
         cur = conn.execute(
             "INSERT INTO subscriptions(name, amount, currency, cycle, custom_days,"
             " anchor_day, next_due_date, trial_end_date, notes, tags,"
-            " times_used_per_month)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            " times_used_per_month, owner, payer, share_pct)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (body.name, body.amount, body.currency.upper(), body.cycle,
              body.custom_days, anchor, body.next_due_date, body.trial_end_date,
-             body.notes, body.tags, body.times_used_per_month),
+             body.notes, body.tags, body.times_used_per_month,
+             body.owner, body.payer, body.share_pct),
         )
         history.record_amount(conn, cur.lastrowid, body.amount)
     row = conn.execute("SELECT * FROM subscriptions WHERE id = ?",
@@ -145,10 +153,12 @@ def update_subscription(sub_id: int, body: SubscriptionIn):
         conn.execute(
             "UPDATE subscriptions SET name=?, amount=?, currency=?, cycle=?,"
             " custom_days=?, anchor_day=?, next_due_date=?, trial_end_date=?,"
-            " notes=?, tags=?, times_used_per_month=? WHERE id=?",
+            " notes=?, tags=?, times_used_per_month=?, owner=?, payer=?,"
+            " share_pct=? WHERE id=?",
             (body.name, body.amount, body.currency.upper(), body.cycle,
              body.custom_days, anchor, body.next_due_date, body.trial_end_date,
-             body.notes, body.tags, body.times_used_per_month, sub_id),
+             body.notes, body.tags, body.times_used_per_month,
+             body.owner, body.payer, body.share_pct, sub_id),
         )
         if old_row["amount"] != body.amount:
             history.record_amount(conn, sub_id, body.amount)
@@ -501,6 +511,18 @@ def import_confirm(body: ImportConfirmIn):
     rows = [conn.execute("SELECT * FROM subscriptions WHERE id = ?",
                          (sid,)).fetchone() for sid in created]
     return {"created": [_row_dict(r) for r in rows]}
+
+
+# --- family mode ---------------------------------------------------------------
+
+@app.get("/api/family")
+def family_breakdown():
+    """Who pays for what: per-payer share-adjusted totals (never mixing
+    currencies) plus the owner/payer/share of every active subscription."""
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT * FROM subscriptions WHERE active = 1").fetchall()
+    return family.family_breakdown(rows)
 
 
 # --- cancel assistant: static knowledge base -----------------------------------

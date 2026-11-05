@@ -56,6 +56,10 @@ _EXTRA_SUBSCRIPTION_COLUMNS: dict[str, str] = {
     "paused": "INTEGER NOT NULL DEFAULT 0",
     "cancel_planned": "INTEGER NOT NULL DEFAULT 0",
     "cancel_deadline": "TEXT",
+    # family mode: кому належить, хто платить, частка платника (%)
+    "owner": "TEXT",
+    "payer": "TEXT",
+    "share_pct": "REAL NOT NULL DEFAULT 100",
 }
 
 
