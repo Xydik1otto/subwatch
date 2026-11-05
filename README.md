@@ -3,7 +3,9 @@
 ![tests](https://github.com/bigpi/subwatch/actions/workflows/tests.yml/badge.svg)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![python](https://img.shields.io/badge/python-3.12%2B-blue)
-![version](https://img.shields.io/badge/version-0.4.0-orange)
+![version](https://img.shields.io/badge/version-1.0.0-orange)
+
+**Українська** | [English](README.en.md)
 
 Local-first трекер підписок. Без хмари, без акаунтів, без телеметрії —
 усі дані живуть в одному SQLite-файлі на вашому диску. Python + FastAPI.
