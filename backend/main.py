@@ -487,10 +487,10 @@ def import_analyze(body: ImportAnalyzeIn):
     bank's known column names instead of guessing.
     """
     try:
-        txns, candidates = native_accel.parse_and_detect(body.csv, body.preset)
+        parsed_rows, candidates = native_accel.parse_and_detect(body.csv, body.preset)
     except ValueError as e:
         raise HTTPException(422, str(e))
-    return {"parsed_rows": len(txns), "candidates": candidates}
+    return {"parsed_rows": parsed_rows, "candidates": candidates}
 
 
 @app.post("/api/import/confirm")

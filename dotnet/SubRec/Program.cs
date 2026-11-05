@@ -63,5 +63,5 @@ catch (FormatException ex)
 
 var candidates = Detect.DetectRecurring(txns, minOcc, tol);
 using (var stdout = new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false)) { AutoFlush = true })
-    stdout.Write(JsonWriter.Dump(candidates));
+    stdout.Write("{\"rows\":" + txns.Count + ",\"candidates\":" + JsonWriter.Dump(candidates) + "}");
 return 0;

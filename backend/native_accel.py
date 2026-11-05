@@ -79,24 +79,37 @@ def _txns_to_csv(txns: list[Txn]) -> str:
     return buf.getvalue()
 
 
-def _run_native(csv_text: str, min_occurrences: int, tol: int) -> list[dict] | None:
+def _run_native(csv_text: str, min_occurrences: int, tol: int,
+                canonical: bool = False) -> dict | None:
+    """Run the exe on CSV text. Returns {"rows": n, "candidates": [...]}
+    or None on any failure (missing exe, crash, bad output). `canonical`
+    selects the CLI's fixed-order input (see _txns_to_csv)."""
     exe = native_exe()
     if exe is None:
         return None
     try:
+        args = [str(exe)]
+        if canonical:
+            args.append("--canonical")
+        args += ["--min-occurrences", str(min_occurrences), "--tolerance", str(tol)]
         proc = subprocess.run(
-            [str(exe), "--canonical", "--min-occurrences", str(min_occurrences),
-             "--tolerance", str(tol)],
-            input=csv_text, capture_output=True, encoding="utf-8",
+            args, input=csv_text, capture_output=True, encoding="utf-8",
             timeout=_TIMEOUT_S)
         if proc.returncode != 0:
             return None
-        candidates = json.loads(proc.stdout)
-        if not isinstance(candidates, list):
+        out = json.loads(proc.stdout)
+        if not (isinstance(out, dict) and isinstance(out.get("rows"), int)
+                and _valid_candidates(out.get("candidates"))):
             return None
-        return candidates
+        return out
     except (OSError, subprocess.SubprocessError, ValueError, json.JSONDecodeError):
         return None
+
+
+def _valid_candidates(obj) -> list[dict] | None:
+    if isinstance(obj, list) and all(isinstance(c, dict) for c in obj):
+        return obj
+    return None
 
 
 def detect_recurring(txns: list[Txn], min_occurrences: int = csvimport.MIN_OCCURRENCES,
@@ -106,17 +119,24 @@ def detect_recurring(txns: list[Txn], min_occurrences: int = csvimport.MIN_OCCUR
     Accepts already-parsed Txn rows; identical output to the Python path
     (native path serializes the rows back to canonical CSV for the CLI).
     """
-    native = _run_native(_txns_to_csv(txns), min_occurrences, tol)
-    if native is not None:
-        return native
+    native = _run_native(_txns_to_csv(txns), min_occurrences, tol, canonical=True)
+    if native is not None and native["rows"] == len(txns):
+        return native["candidates"]
     return _py_detect(txns, min_occurrences, tol)
 
 
-def parse_and_detect(text: str, preset_name: str | None = None) -> tuple[list[Txn], list[dict]]:
-    """Full pipeline on raw CSV text: parse_csv() + accelerated detect_recurring().
+def parse_and_detect(text: str, preset_name: str | None = None) -> tuple[int, list[dict]]:
+    """Full pipeline on raw CSV text -> (parsed_rows, candidates).
 
-    Bank presets are applied on the Python side (the CLI has no preset table);
-    detection still goes through the native accelerator when available.
+    Without a preset the raw CSV goes straight into the native CLI (its own
+    parser + detector, no double parsing); bank presets are applied on the
+    Python side (the CLI has no preset table) and only detection is
+    accelerated. Falls back to the pure-Python pipeline when the exe is
+    unavailable or fails.
     """
+    if preset_name is None:
+        native = _run_native(text, csvimport.MIN_OCCURRENCES, csvimport.DATE_TOLERANCE)
+        if native is not None:
+            return native["rows"], native["candidates"]
     txns = _py_parse(text, preset_name)
-    return txns, detect_recurring(txns)
+    return len(txns), detect_recurring(txns)
