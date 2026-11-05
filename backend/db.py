@@ -19,9 +19,33 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     notes          TEXT,
     tags           TEXT,
     active         INTEGER NOT NULL DEFAULT 1,
+    times_used_per_month REAL,
     CHECK (cycle != 'custom' OR (custom_days IS NOT NULL AND custom_days > 0))
 );
+
+CREATE TABLE IF NOT EXISTS price_history (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    subscription_id INTEGER NOT NULL
+                    REFERENCES subscriptions(id) ON DELETE CASCADE,
+    amount          REAL NOT NULL,
+    changed_at      TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_price_history_sub
+    ON price_history(subscription_id);
 """
+
+# Columns added after the MVP schema; existing DBs are migrated on connect.
+_EXTRA_SUBSCRIPTION_COLUMNS: dict[str, str] = {
+    "times_used_per_month": "REAL",
+}
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(subscriptions)")}
+    for name, ddl in _EXTRA_SUBSCRIPTION_COLUMNS.items():
+        if name not in cols:
+            conn.execute(f"ALTER TABLE subscriptions ADD COLUMN {name} {ddl}")
 
 
 def connect(db_path: str | None = None) -> sqlite3.Connection:
@@ -30,6 +54,7 @@ def connect(db_path: str | None = None) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.executescript(SCHEMA)
+    _migrate(conn)
     return conn
 
 

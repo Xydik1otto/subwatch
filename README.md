@@ -1,7 +1,26 @@
 # subwatch
 
+![tests](https://github.com/bigpi/subwatch/actions/workflows/tests.yml/badge.svg)
+![license](https://img.shields.io/badge/license-MIT-green)
+![python](https://img.shields.io/badge/python-3.12%2B-blue)
+![version](https://img.shields.io/badge/version-0.1.0--alpha-orange)
+
 Local-first трекер підписок. Без хмари, без акаунтів, без телеметрії —
 усі дані живуть в одному SQLite-файлі на вашому диску. Python + FastAPI.
+
+## Можливості (v0.1.0-alpha)
+
+- CRUD підписок, сортування, monthly-equivalent, річний перерахунок.
+- **Правильні дати**: month-end якір (Jan 31 → Feb 28/29 → Mar 31),
+  високосні роки, custom-цикли в днях.
+- Календар списань 30/60/90 днів, CLI-нагадування, ICS-експорт (RFC 5545),
+  тріал-трекер.
+- **CSV-імпорт виписки** з авто-детекцією повторюваних платежів
+  (періодичність 7/14/30/31/365 днів ±2) → кандидати на підтвердження.
+- **Історія цін**: кожна зміна amount записується —
+  `Netflix: 15.49→16.99 (+9.7% за 8 міс)`.
+- **Cost-per-use**: вартість одного використання підписки.
+
 
 ## Проблема
 
@@ -48,8 +67,35 @@ curl localhost:8000/api/trials
 # списання відбулося — перекрутити дату на цикл вперед
 curl -X POST localhost:8000/api/subscriptions/1/mark-paid
 
+# cost-per-use: щомісячна вартість / кількість використань
+curl -X POST localhost:8000/api/subscriptions -H 'content-type: application/json' \
+  -d '{"name":"Gym","amount":30,"cycle":"monthly","next_due_date":"2026-12-01","times_used_per_month":12}'
+
 # експорт ВСІХ майбутніх списань у календар
 curl -o subwatch.ics localhost:8000/api/export.ics
+```
+
+### Імпорт банківської виписки (CSV)
+
+```bash
+# крок 1: авто-детекція повторюваних платежів (періодичність 7/14/30/31/365 днів ±2)
+curl -X POST localhost:8000/api/import/analyze -H 'content-type: application/json' \
+  -d '{"csv":"date,description,amount\n2026-01-01,NETFLIX.COM,15.49\n2026-02-01,NETFLIX.COM,15.49\n2026-03-01,NETFLIX.COM,15.49"}'
+
+# крок 2: підтвердити знайдених кандидатів -> створення підписок
+curl -X POST localhost:8000/api/import/confirm -H 'content-type: application/json' \
+  -d '{"candidates":[{"name":"Netflix","amount":15.49,"cycle":"monthly","next_due_date":"2026-04-01"}]}'
+```
+
+Парсер розуміє `;`/`,`/tab-розділювачі, українські й англійські заголовки
+(`Дата/Опис/Сума`), формати дат `YYYY-MM-DD`, `DD.MM.YYYY`, `DD/MM/YYYY`,
+десяткові коми (`16,99`), тисячні пробіли (`1 234,56`), мінуси й дужки.
+
+### Історія цін
+
+```bash
+curl localhost:8000/api/subscriptions/1/price-history  # всі точки amount
+curl localhost:8000/api/price-changes                  # 'Netflix: 15.49→16.99 (+9.7% за 8 міс)'
 ```
 
 ### CLI-нагадування (локальні, без демона)
@@ -77,4 +123,4 @@ Apple Calendar, і нагадування прийдуть туди, де ви �
 
 ## Ліцензія
 
-MIT.
+MIT — див. [LICENSE](LICENSE).

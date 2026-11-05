@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import ics, schedule
+from . import csvimport, history, ics, schedule
 from .db import DB_PATH, connect
 
 app = FastAPI(title="subwatch", version="0.1.0",
@@ -37,12 +37,16 @@ class SubscriptionIn(BaseModel):
                                        pattern=r"^\d{4}-\d{2}-\d{2}$")
     notes: str | None = None
     tags: str | None = None
+    times_used_per_month: float | None = Field(default=None, ge=0)
 
 
 def _row_dict(r) -> dict:
     d = dict(r)
     d["monthly_equivalent"] = round(schedule.monthly_equivalent(
         d["amount"], d["cycle"], d["custom_days"]), 4)
+    uses = d.get("times_used_per_month")
+    d["cost_per_use"] = (round(d["monthly_equivalent"] / uses, 4)
+                         if uses and uses > 0 else None)
     return d
 
 
@@ -71,12 +75,14 @@ def create_subscription(body: SubscriptionIn):
     with conn:
         cur = conn.execute(
             "INSERT INTO subscriptions(name, amount, currency, cycle, custom_days,"
-            " anchor_day, next_due_date, trial_end_date, notes, tags)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?)",
+            " anchor_day, next_due_date, trial_end_date, notes, tags,"
+            " times_used_per_month)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (body.name, body.amount, body.currency.upper(), body.cycle,
              body.custom_days, anchor, body.next_due_date, body.trial_end_date,
-             body.notes, body.tags),
+             body.notes, body.tags, body.times_used_per_month),
         )
+        history.record_amount(conn, cur.lastrowid, body.amount)
     row = conn.execute("SELECT * FROM subscriptions WHERE id = ?",
                        (cur.lastrowid,)).fetchone()
     return _row_dict(row)
@@ -102,17 +108,21 @@ def update_subscription(sub_id: int, body: SubscriptionIn):
         raise HTTPException(422, "custom cycle needs custom_days")
     anchor = _effective_anchor(body)
     conn = get_conn()
-    if not conn.execute("SELECT 1 FROM subscriptions WHERE id = ?", (sub_id,)).fetchone():
+    old_row = conn.execute("SELECT * FROM subscriptions WHERE id = ?",
+                           (sub_id,)).fetchone()
+    if not old_row:
         raise HTTPException(404, "subscription not found")
     with conn:
         conn.execute(
             "UPDATE subscriptions SET name=?, amount=?, currency=?, cycle=?,"
             " custom_days=?, anchor_day=?, next_due_date=?, trial_end_date=?,"
-            " notes=?, tags=? WHERE id=?",
+            " notes=?, tags=?, times_used_per_month=? WHERE id=?",
             (body.name, body.amount, body.currency.upper(), body.cycle,
              body.custom_days, anchor, body.next_due_date, body.trial_end_date,
-             body.notes, body.tags, sub_id),
+             body.notes, body.tags, body.times_used_per_month, sub_id),
         )
+        if old_row["amount"] != body.amount:
+            history.record_amount(conn, sub_id, body.amount)
     row = conn.execute("SELECT * FROM subscriptions WHERE id = ?", (sub_id,)).fetchone()
     return _row_dict(row)
 
@@ -213,6 +223,80 @@ def export_ics(days: int = 90):
     return Response(content=data, media_type="text/calendar",
                     headers={"Content-Disposition":
                              'attachment; filename="subwatch.ics"'})
+
+
+# --- CSV import ---------------------------------------------------------------
+
+class ImportAnalyzeIn(BaseModel):
+    csv: str
+
+
+class ImportCandidateIn(BaseModel):
+    name: str
+    amount: float = Field(ge=0)
+    currency: str = "USD"
+    cycle: str = Field(pattern="^(monthly|yearly|custom)$")
+    custom_days: int | None = Field(default=None, gt=0)
+    next_due_date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    description: str | None = None
+
+
+class ImportConfirmIn(BaseModel):
+    candidates: list[ImportCandidateIn]
+
+
+@app.post("/api/import/analyze")
+def import_analyze(body: ImportAnalyzeIn):
+    """Parse a bank CSV and return recurring-payment candidates."""
+    try:
+        txns = csvimport.parse_csv(body.csv)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    return {"parsed_rows": len(txns),
+            "candidates": csvimport.detect_recurring(txns)}
+
+
+@app.post("/api/import/confirm")
+def import_confirm(body: ImportConfirmIn):
+    """Create subscriptions from confirmed import candidates."""
+    created = []
+    conn = get_conn()
+    with conn:
+        for c in body.candidates:
+            cur = conn.execute(
+                "INSERT INTO subscriptions(name, amount, currency, cycle,"
+                " custom_days, next_due_date, notes) VALUES (?,?,?,?,?,?,?)",
+                (c.name, c.amount, c.currency.upper(), c.cycle, c.custom_days,
+                 c.next_due_date,
+                 f"Imported from CSV: {c.description or c.name}"),
+            )
+            history.record_amount(conn, cur.lastrowid, c.amount)
+            created.append(cur.lastrowid)
+    rows = [conn.execute("SELECT * FROM subscriptions WHERE id = ?",
+                         (sid,)).fetchone() for sid in created]
+    return {"created": [_row_dict(r) for r in rows]}
+
+
+# --- price history -------------------------------------------------------------
+
+@app.get("/api/subscriptions/{sub_id}/price-history")
+def price_history(sub_id: int):
+    conn = get_conn()
+    if not conn.execute("SELECT 1 FROM subscriptions WHERE id = ?",
+                        (sub_id,)).fetchone():
+        raise HTTPException(404, "subscription not found")
+    rows = conn.execute(
+        "SELECT amount, changed_at FROM price_history"
+        " WHERE subscription_id = ? ORDER BY changed_at, id",
+        (sub_id,)).fetchall()
+    return [{"amount": r["amount"], "date": r["changed_at"]} for r in rows]
+
+
+@app.get("/api/price-changes")
+def price_changes():
+    """Human-readable price-change summaries ('Netflix: 15.49→16.99 ...')."""
+    conn = get_conn()
+    return history.price_change_summaries(conn)
 
 
 @app.get("/")
