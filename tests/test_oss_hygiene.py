@@ -96,12 +96,21 @@ def test_no_personal_names_or_emails_hardcoded(tracked_files):
     for p in tracked_files:
         if p.suffix not in (".py", ".md", ".toml", ".html", ".js", ".json", ".yml"):
             continue
+        # package-lock.json — згенерований npm'ом vendor-файл: e-mail'и
+        # maintainer'ів залежностей — не наші секрети.
+        if p.name == "package-lock.json":
+            continue
         try:
             text = p.read_text(encoding="utf-8")
         except (UnicodeDecodeError, OSError):
             continue
         m = email.search(text)
         if m:
+            # Xcode-метадані(asset catalogs) згадують імена файлів іконок
+            # виду 'AppIcon-512@2x.png' — '@2x' це scale-суфікс Apple,
+            # а не адреса.
+            if m.group(0).endswith("@2x.png"):
+                continue
             offenders.append((str(p), m.group(0)))
     assert offenders == [], offenders
 
