@@ -506,7 +506,7 @@ def tag_analytics_svg():
 # --- CSV import ---------------------------------------------------------------
 
 class ImportAnalyzeIn(BaseModel):
-    csv: str
+    csv: str   # текст виписки: CSV або JSON; JSON розпізнається автоматично
     preset: str | None = None   # 'revolut' | 'wise' — див. GET /api/import/presets
 
 
@@ -533,10 +533,11 @@ def import_presets():
 
 @app.post("/api/import/analyze")
 def import_analyze(body: ImportAnalyzeIn):
-    """Parse a bank CSV and return recurring-payment candidates.
+    """Parse a bank statement (CSV or JSON — JSON is auto-detected) and
+    return recurring-payment candidates.
 
     With `preset` ('revolut'/'wise') the header row is matched against the
-    bank's known column names instead of guessing.
+    bank's known column names instead of guessing (CSV only).
     """
     try:
         parsed_rows, candidates = native_accel.parse_and_detect(body.csv, body.preset)

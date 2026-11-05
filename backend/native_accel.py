@@ -126,14 +126,19 @@ def detect_recurring(txns: list[Txn], min_occurrences: int = csvimport.MIN_OCCUR
 
 
 def parse_and_detect(text: str, preset_name: str | None = None) -> tuple[int, list[dict]]:
-    """Full pipeline on raw CSV text -> (parsed_rows, candidates).
+    """Full pipeline on raw statement text -> (parsed_rows, candidates).
 
+    JSON statements (bare list / {"transactions": ...} / nested wrappers)
+    are parsed on the Python side and only detection is accelerated.
     Without a preset the raw CSV goes straight into the native CLI (its own
     parser + detector, no double parsing); bank presets are applied on the
     Python side (the CLI has no preset table) and only detection is
     accelerated. Falls back to the pure-Python pipeline when the exe is
     unavailable or fails.
     """
+    if csvimport._looks_like_json(text):
+        txns = csvimport.parse_json_statement(text)
+        return len(txns), detect_recurring(txns)
     if preset_name is None:
         native = _run_native(text, csvimport.MIN_OCCURRENCES, csvimport.DATE_TOLERANCE)
         if native is not None:

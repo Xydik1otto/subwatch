@@ -6,6 +6,12 @@
 ## [Unreleased]
 
 ### Added
+- **Імпорт виписок у форматі JSON** (поряд із CSV): `parse_json_statement()`
+  і формат-агностичний `parse_statement()` у `backend/csvimport.py`;
+  `/api/import/analyze` автоматично розпізнає JSON (список об'єктів,
+  `{"transactions": [...]}`, `{"statement": {"transactions": [...]}}`,
+  `{"data": [...]}`; вкладені `amount.value/amount.currency` у стилі
+  Monzo/Starling) і повертає тих самих кандидатів повторюваних платежів.
 - **Cancel reminders за N днів до списання**: `POST
   /api/subscriptions/{id}/cancel-reminder` виводить дедлайн скасування
   автоматично як `next_due_date - N` (колонка `cancel_days_before`), а
