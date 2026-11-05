@@ -1,0 +1,48 @@
+name: ios-build
+
+on:
+  push:
+    branches: [master, main, mobile/android-ios]
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install web dependencies and sync Capacitor
+        run: npm ci && npx cap sync ios
+
+      # CocoaPods is preinstalled on macOS runners.
+      - name: Install iOS pods
+        working-directory: ios/App
+        run: pod install
+
+      # Unsigned build: no Apple Developer certificate ($99/yr is out of budget).
+      # The unsigned .app is zipped as-is — re-sign it locally with
+      # AltStore / Sideloadly (see MOBILE.md).
+      - name: Build unsigned .app (iphoneos)
+        working-directory: ios/App
+        run: |
+          xcodebuild -workspace App.xcworkspace -scheme App \
+            -configuration Release -sdk iphoneos \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY="" AD_HOC_CODE_SIGNING_ALLOWED=YES
+
+      - name: Zip unsigned app bundle
+        run: |
+          cd ios/App/build/Build/Products/Release-iphoneos
+          zip -qry Subwatch-unsigned.zip App.app
+
+      - name: Upload unsigned .app artifact (30 days)
+        uses: actions/upload-artifact@v4
+        with:
+          name: subwatch-ios-unsigned
+          path: ios/App/build/Build/Products/Release-iphoneos/Subwatch-unsigned.zip
+          retention-days: 30
