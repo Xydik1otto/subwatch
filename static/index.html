@@ -49,6 +49,14 @@
 <h2>Найближчі 30 днів</h2>
 <table id="upcoming"></table>
 
+<h2>Як скасувати (помічник)</h2>
+<p>
+  <label for="cancel-service">Сервіс:</label>
+  <select id="cancel-service" aria-label="Оберіть сервіс для інструкції скасування"></select>
+  <button id="cancel-show" aria-label="Показати інструкцію скасування">Показати</button>
+</p>
+<div id="cancel-guide" aria-live="polite"></div>
+
 <script>
 function money(x, c) { return x.toFixed(2) + ' ' + c; }
 
@@ -106,6 +114,24 @@ document.getElementById('filters').addEventListener('click', (e) => {
     b.classList.toggle('on', b.dataset.f === f));
   drawSubs(lastSubs || []);
 });
+
+// --- cancel assistant: статична база знань топ-20 сервісів ---
+async function loadCancelAssistant() {
+  const sel = document.getElementById('cancel-service');
+  const services = await (await fetch('/api/cancel-assistant')).json();
+  sel.innerHTML = services.map(s =>
+    `<option value="${s.id}">${s.name}</option>`).join('');
+}
+document.getElementById('cancel-show').addEventListener('click', async () => {
+  const id = document.getElementById('cancel-service').value;
+  const g = await (await fetch(`/api/cancel-assistant/${id}`)).json();
+  const lang = localStorage.getItem('subwatch.lang') || 'uk';
+  const steps = lang === 'en' ? g.steps_en : g.steps_uk;
+  document.getElementById('cancel-guide').innerHTML =
+    `<p><a href="${g.cancel_url}" target="_blank" rel="noopener">${g.cancel_url}</a></p>` +
+    `<ol>${steps.map(s => `<li>${s}</li>`).join('')}</ol>`;
+});
+loadCancelAssistant();
 
 async function load() {
   const s = await (await fetch('/api/summary')).json();

@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import csvimport, history, ics, projection as projection_mod, rates, schedule, tags as tags_mod
+from . import cancel_kb, csvimport, history, ics, projection as projection_mod, rates, schedule, tags as tags_mod
 from .db import DB_PATH, connect
 
 app = FastAPI(title="subwatch", version="0.4.0",
@@ -498,6 +498,39 @@ def import_confirm(body: ImportConfirmIn):
     rows = [conn.execute("SELECT * FROM subscriptions WHERE id = ?",
                          (sid,)).fetchone() for sid in created]
     return {"created": [_row_dict(r) for r in rows]}
+
+
+# --- cancel assistant: static knowledge base -----------------------------------
+
+@app.get("/api/cancel-assistant")
+def cancel_assistant_catalogue():
+    """Catalogue of the top-20 services with official cancellation links."""
+    return cancel_kb.all_services()
+
+
+@app.get("/api/cancel-assistant/{service_id}")
+def cancel_assistant_guide(service_id: str):
+    """Step-by-step cancellation guide (UA + EN) for one service."""
+    g = cancel_kb.guide(service_id)
+    if not g:
+        raise HTTPException(404, "service not found in cancel-assistant knowledge base")
+    return g
+
+
+@app.get("/api/subscriptions/{sub_id}/cancel-guide")
+def subscription_cancel_guide(sub_id: int):
+    """Match a subscription's name against the knowledge base and return
+    the matching cancellation guide, or 404 if the service is unknown."""
+    conn = get_conn()
+    row = conn.execute("SELECT name FROM subscriptions WHERE id = ?",
+                       (sub_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, "subscription not found")
+    sid = cancel_kb.match_service(row["name"])
+    if not sid:
+        raise HTTPException(404, "no cancel-assistant guide for this service name")
+    return {"subscription_id": sub_id, "matched_name": row["name"],
+            "service_id": sid, **cancel_kb.guide(sid)}
 
 
 # --- price history -------------------------------------------------------------

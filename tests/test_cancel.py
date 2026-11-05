@@ -91,6 +91,14 @@ def test_deadline_lands_in_ics_export(client):
     assert "CANCEL BEFORE: Keeper" not in data
 
 
+def test_ui_has_cancel_assistant_section():
+    html = TestClient(app).get("/").text
+    assert "cancel-assistant" in html
+    assert 'id="cancel-service"' in html
+    assert 'id="cancel-show"' in html
+    assert "/api/cancel-assistant" in html
+
+
 def test_ui_has_tocancel_badge_styles():
     html = TestClient(app).get("/").text
     assert "tocancel" in html
