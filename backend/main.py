@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import csvimport, history, ics, rates, schedule
+from . import csvimport, history, ics, projection as projection_mod, rates, schedule
 from .db import DB_PATH, connect
 
 app = FastAPI(title="subwatch", version="0.1.0",
@@ -303,6 +303,38 @@ def worst_offenders(limit: int = 5):
             round(it["monthly_equivalent"] / total * 100, 1) if total else 0.0)
     items.sort(key=lambda d: (-d["monthly_equivalent"], d["name"].lower()))
     return items[:max(0, limit)]
+
+
+# --- annual projection ----------------------------------------------------------
+
+@app.get("/api/projection")
+def projection(months: int = 12, today: str | None = None):
+    """Per-calendar-month sums of actual charges for the next `months` months.
+
+    `today` (YYYY-MM-DD) is an optional override for previews/tests; the SVG
+    chart always uses the real current date.
+    """
+    if months < 1 or months > 36:
+        raise HTTPException(422, "months must be between 1 and 36")
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT * FROM subscriptions WHERE active = 1 AND paused = 0").fetchall()
+    as_of = dt.date.fromisoformat(today) if today else dt.date.today()
+    proj = projection_mod.monthly_projection(rows, as_of, months)
+    return {"months": proj, "primary_currency": projection_mod.primary_currency(proj)}
+
+
+@app.get("/api/projection.svg")
+def projection_svg(months: int = 12):
+    if months < 1 or months > 36:
+        raise HTTPException(422, "months must be between 1 and 36")
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT * FROM subscriptions WHERE active = 1 AND paused = 0").fetchall()
+    proj = projection_mod.monthly_projection(rows, dt.date.today(), months)
+    ccy = projection_mod.primary_currency(proj) or "USD"
+    svg = projection_mod.build_svg(proj, ccy)
+    return Response(content=svg, media_type="image/svg+xml")
 
 
 # --- CSV import ---------------------------------------------------------------
