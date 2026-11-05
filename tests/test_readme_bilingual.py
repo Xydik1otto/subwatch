@@ -36,7 +36,11 @@ def test_no_russian_localization():
     for text in (readme_en, readme_uk):
         assert "russian" not in text.replace("no russian localization", "")
     # no ru.json / ru_RU locale files anywhere in the repo
+    # (node_modules/ пропускаємо: локальні npm-артефакти з назвами на кшталт
+    # run.js — не частина репозиторію; бекенд-дистрибутиви теж не локалі)
     for p in ROOT.rglob("*"):
+        if "node_modules" in p.parts:
+            continue
         if p.is_file() and p.suffix in (".json", ".md", ".py", ".html", ".js"):
             name = p.name.lower()
             assert not (name.startswith("ru") and "readme" not in name
