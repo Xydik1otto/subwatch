@@ -6,6 +6,10 @@
 ## [Unreleased]
 
 ### Added
+- **Dashboard widgets**: `GET /api/dashboard` — усі віджети дашборда одним
+  викликом (summary, upcoming 7 днів, trials, to-cancel, unseen alerts,
+  worst offenders топ-3, 3-місячний spending trend) або вибірково через
+  `?widgets=summary,trends`; невідомі імена віджетів → 422.
 - **Spending trends по місяцях**: `backend/trends.py` + `GET /api/trends?months=N`
   — фактичні списання за останні N місяців (дзеркало projection, але назад),
   помісячні суми по валютах (валюти не змішуються), середнє за вікно,

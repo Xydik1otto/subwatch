@@ -745,6 +745,57 @@ def price_changes():
     return history.price_change_summaries(conn)
 
 
+# --- dashboard widgets ----------------------------------------------------------
+
+@app.get("/api/dashboard")
+def dashboard(widgets: str | None = None):
+    """Усі віджети дашборда одним викликом (один round-trip замість шести).
+
+    Стандартний набір: summary, upcoming (7 днів), trials, to-cancel,
+    unseen alerts, worst offenders (топ-3) і 3-місячний spending trend.
+    `widgets` — кома-розділений підмножина імен віджетів для вибіркового
+    запиту (наприклад 'summary,trends').
+    """
+    conn = get_conn()
+    requested = ([w.strip() for w in widgets.split(",") if w.strip()]
+                 if widgets else
+                 ["summary", "upcoming", "trials", "to_cancel",
+                  "unseen_alerts", "worst_offenders", "trends"])
+    out = {}
+    if "summary" in requested:
+        out["summary"] = summary()
+    if "upcoming" in requested:
+        out["upcoming"] = upcoming(days=7)
+    if "trials" in requested:
+        out["trials"] = trials()
+    if "to_cancel" in requested:
+        planned = conn.execute(
+            "SELECT * FROM subscriptions WHERE active = 1 AND paused = 0"
+            " AND cancel_planned = 1 ORDER BY cancel_deadline ASC").fetchall()
+        out["to_cancel"] = {
+            "count": len(planned),
+            "nearest_deadline": (planned[0]["cancel_deadline"]
+                                 if planned else None),
+        }
+    if "unseen_alerts" in requested:
+        out["unseen_alerts"] = alerts_mod.unseen_count(conn)
+    if "worst_offenders" in requested:
+        out["worst_offenders"] = worst_offenders(limit=3)
+    if "trends" in requested:
+        rows = conn.execute(
+            "SELECT * FROM subscriptions WHERE active = 1 AND paused = 0"
+        ).fetchall()
+        trends_list = trends_mod.monthly_trends(rows, dt.date.today(), 3)
+        out["trends"] = {
+            "months": trends_list,
+            "summary": trends_mod.trend_summary(trends_list),
+        }
+    unknown = set(requested) - set(out)
+    if unknown:
+        raise HTTPException(422, f"unknown widgets: {', '.join(sorted(unknown))}")
+    return out
+
+
 @app.get("/")
 def index():
     return FileResponse(STATIC_DIR / "index.html")
