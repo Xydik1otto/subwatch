@@ -102,4 +102,9 @@ def test_ui_has_cancel_assistant_section():
 def test_ui_has_tocancel_badge_styles():
     html = TestClient(app).get("/").text
     assert "tocancel" in html
-    assert "скасувати до" in html
+    # 'скасувати до' тепер у i18n-словнику (badge.cancel_before)
+    import json
+    from pathlib import Path
+    uk = json.loads((Path(__file__).parent.parent / "static" / "i18n" / "uk.json")
+                    .read_text(encoding="utf-8"))
+    assert "скасувати до" in uk["badge.cancel_before"]

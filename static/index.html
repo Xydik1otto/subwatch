@@ -25,8 +25,9 @@
   .card-total { border-color: #1d3557; background: #1d3557; color: #f1faee; box-shadow: 0 2px 10px rgba(29,53,87,.35); }
   .card-total b { color: #f1faee; font-size: 1.7rem; }
   .filters { display: inline-flex; gap: .4rem; margin-left: .75rem; vertical-align: middle; }
-  .filters button { border: 1px solid #ccc; background: #fff; border-radius: 999px; padding: .2rem .8rem; cursor: pointer; font-size: .9rem; }
-  .filters button.on { background: #1d3557; color: #f1faee; border-color: #1d3557; }
+  .filters button, .lang-switch button { border: 1px solid #ccc; background: #fff; border-radius: 999px; padding: .2rem .8rem; cursor: pointer; font-size: .9rem; }
+  .filters button.on, .lang-switch button.on { background: #1d3557; color: #f1faee; border-color: #1d3557; }
+  .lang-switch { margin-left: .5rem; }
   .logo { font-size: 1.3rem; margin-right: .3rem; }
   .paused td { color: #888; }
   .due { font-weight: 600; }
@@ -34,15 +35,26 @@
     padding: .05rem .55rem; font-size: .85rem; vertical-align: middle; }
   .priceup td { background: #fff7e6; }
   .priceup .price-mark { color: #b45309; font-weight: 700; white-space: nowrap; }
+  .demo-banner { border: 1px dashed #1d3557; border-radius: 8px; padding: .8rem 1rem; margin: 1rem 0; }
+  .demo-banner button { cursor: pointer; }
+  :is(button, a, select, input):focus-visible { outline: 3px solid #1d3557; outline-offset: 2px; }
 </style>
 </head>
 <body>
-<h1>subwatch <span id="alert-badge" class="alert-badge" hidden aria-label="Нові алерти зміни ціни"></span></h1>
-<p>Локальний трекер підписок. Дані — лише у вашому SQLite. <a href="/api/export.ics">Експорт .ics</a></p>
+<h1>subwatch
+  <span id="alert-badge" class="alert-badge" hidden aria-label="Нові алерти зміни ціни" data-i18n-aria="alert.badge_aria"></span>
+  <span class="lang-switch" id="lang-switch" role="group" aria-label="Мова інтерфейсу" data-i18n-aria="lang.aria">
+    <button type="button" data-lang="uk" class="on" aria-pressed="true">UA</button>
+    <button type="button" data-lang="en" aria-pressed="false">EN</button>
+  </span>
+</h1>
+<p><span data-i18n="app.tagline">Локальний трекер підписок. Дані — лише у вашому SQLite.</span>
+  <a href="/api/export.ics" data-i18n="export.ics">Експорт .ics</a></p>
+<div id="demo-banner" class="demo-banner" hidden role="status"></div>
 <div class="cards" id="cards"></div>
 
-<h2>Підписки (за датою списання)
-  <span class="filters" id="filters">
+<h2 data-i18n="subs.title">Підписки (за датою списання)
+  <span class="filters" id="filters" role="group">
     <button data-f="all" class="on">Усі</button>
     <button data-f="active">Активні</button>
     <button data-f="paused">На паузі</button>
@@ -50,19 +62,66 @@
 </h2>
 <table id="subs"></table>
 
-<h2>Найближчі 30 днів</h2>
+<h2 data-i18n="upcoming.title">Найближчі 30 днів</h2>
 <table id="upcoming"></table>
 
-<h2>Як скасувати (помічник)</h2>
+<h2 data-i18n="cancel.title">Як скасувати (помічник)</h2>
 <p>
-  <label for="cancel-service">Сервіс:</label>
-  <select id="cancel-service" aria-label="Оберіть сервіс для інструкції скасування"></select>
-  <button id="cancel-show" aria-label="Показати інструкцію скасування">Показати</button>
+  <label for="cancel-service" data-i18n="cancel.service">Сервіс:</label>
+  <select id="cancel-service" aria-label="Оберіть сервіс для інструкції скасування" data-i18n-aria="cancel.select_aria"></select>
+  <button id="cancel-show" aria-label="Показати інструкцію скасування" data-i18n="cancel.show" data-i18n-aria="cancel.show_aria">Показати</button>
 </p>
 <div id="cancel-guide" aria-live="polite"></div>
 
+<p>
+  <a href="/api/export.json" data-i18n="export.json">Експорт JSON</a> ·
+  <a href="/api/export.csv" data-i18n="export.csv">Експорт CSV</a>
+</p>
+
 <script>
 function money(x, c) { return x.toFixed(2) + ' ' + c; }
+
+// --- i18n: UA/EN словники, авто-детект мови браузера, збереження вибору ---
+let STR = {};
+let LANG = 'uk';
+let lastSubs = null;
+let lastSummary = null, lastUpcoming = null, lastEmpty = false;
+async function loadI18n() {
+  const saved = localStorage.getItem('subwatch.lang');
+  const browser = (navigator.language || '').toLowerCase();
+  LANG = saved || (browser.startsWith('uk') ? 'uk' : 'en');
+  if (!['uk', 'en'].includes(LANG)) LANG = 'uk';
+  await setLang(LANG, false);
+}
+async function setLang(lang, save = true) {
+  LANG = lang;
+  STR = await (await fetch(`/static/i18n/${lang}.json`)).json();
+  if (save) localStorage.setItem('subwatch.lang', lang);
+  document.documentElement.lang = lang;
+  document.querySelectorAll('#lang-switch button').forEach(b => {
+    const on = b.dataset.lang === lang;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', on);
+  });
+  document.querySelectorAll('[data-i18n]').forEach(el =>
+    el.textContent = t(el.dataset.i18n));
+  document.querySelectorAll('[data-i18n-aria]').forEach(el =>
+    el.setAttribute('aria-label', t(el.dataset.i18nAria)));
+  if (lastSubs) drawSubs(lastSubs);
+  renderCards(lastSummary);
+  renderUpcoming(lastUpcoming);
+  renderDemoBanner(lastEmpty);
+}
+function t(key, vars) {
+  let s = STR[key] !== undefined ? STR[key] : key;
+  if (vars) for (const [k, v] of Object.entries(vars))
+    s = s.replaceAll(`{${k}}`, v);
+  return s;
+}
+document.getElementById('lang-switch').addEventListener('click', (e) => {
+  const lang = e.target && e.target.dataset && e.target.dataset.lang;
+  if (lang && lang !== LANG) setLang(lang);
+});
 
 // --- emoji-лого картки: за назвою сервісу або тегом ---
 const EMOJI = [
@@ -89,14 +148,16 @@ function emoji(sub) {
 
 // --- фільтр paused/active + рендер таблиці ---
 let filter = 'all';
-let lastSubs = null;
 let unseenAlertIds = new Set();
 function drawSubs(subs) {
   lastSubs = subs;
   const visible = subs.filter(x =>
     filter === 'all' ? true : (filter === 'paused' ? x.paused : !x.paused));
   document.getElementById('subs').innerHTML =
-    '<tr><th></th><th>Назва</th><th>Сума</th><th>Цикл</th><th>Наступне списання</th><th>Тріал</th><th>Статус</th><th>Хто платить</th></tr>' +
+    `<tr><th></th><th>${t('col.name')}</th><th>${t('col.amount')}</th>` +
+    `<th>${t('col.cycle')}</th><th>${t('col.next_due')}</th>` +
+    `<th>${t('col.trial')}</th><th>${t('col.status')}</th>` +
+    `<th>${t('col.payer')}</th></tr>` +
     (visible.map(x => {
       const alerted = unseenAlertIds.has(x.id);
       const cls = x.cancel_planned ? ' class="tocancel"'
@@ -104,16 +165,16 @@ function drawSubs(subs) {
                 : (x.trial_end_date ? ' class="warn"'
                 : (x.paused ? ' class="paused"' : '')));
       const badge = x.cancel_planned
-        ? `<span class="badge">⛔ скасувати до ${x.cancel_deadline}</span>`
-        : (alerted ? '<span class="price-mark">↑ ціна змінилась</span>'
-        : (x.paused ? '⏸ пауза' : ''));
+        ? `<span class="badge">${t('badge.cancel_before', {deadline: x.cancel_deadline})}</span>`
+        : (alerted ? `<span class="price-mark">${t('badge.price_changed')}</span>`
+        : (x.paused ? t('badge.paused') : ''));
       return `<tr${cls}><td><span class="logo">${emoji(x)}</span></td>` +
       `<td>${x.name}</td><td>${money(x.amount, x.currency)}</td><td>${x.cycle}</td>` +
       `<td class="due">${x.next_due_date}</td>` +
       `<td>${x.trial_end_date || '—'}</td><td>${badge}</td>` +
       `<td>${x.payer ? `${x.payer}${x.share_pct != null && x.share_pct !== 100 ? ` (${x.share_pct}%)` : ''}${x.owner ? ` · ${x.owner}` : ''}` : '—'}</td></tr>`;
     }).join('') ||
-     '<tr><td colspan="8">немає підписок у цьому фільтрі</td></tr>');
+     `<tr><td colspan="8">${t('empty.subs')}</td></tr>`);
 }
 document.getElementById('filters').addEventListener('click', (e) => {
   const f = e.target && e.target.dataset && e.target.dataset.f;
@@ -134,8 +195,7 @@ async function loadCancelAssistant() {
 document.getElementById('cancel-show').addEventListener('click', async () => {
   const id = document.getElementById('cancel-service').value;
   const g = await (await fetch(`/api/cancel-assistant/${id}`)).json();
-  const lang = localStorage.getItem('subwatch.lang') || 'uk';
-  const steps = lang === 'en' ? g.steps_en : g.steps_uk;
+  const steps = LANG === 'en' ? g.steps_en : g.steps_uk;
   document.getElementById('cancel-guide').innerHTML =
     `<p><a href="${g.cancel_url}" target="_blank" rel="noopener">${g.cancel_url}</a></p>` +
     `<ol>${steps.map(s => `<li>${s}</li>`).join('')}</ol>`;
@@ -152,30 +212,50 @@ async function loadAlerts() {
   if (lastSubs) drawSubs(lastSubs);
 }
 
-async function load() {
-  const s = await (await fetch('/api/summary')).json();
+function renderCards(s) {
+  if (!s) return;
   const monthly = Object.entries(s.monthly_by_currency).map(([c, v]) => money(v, c)).join(' + ') || '—';
   document.getElementById('cards').innerHTML =
-    `<div class="card card-total" id="total-card">💳 Разом на місяць<b>${monthly}</b></div>` +
-    `<div class="card">Активних<b>${s.active_count}</b></div>` +
-    `<div class="card">На паузі<b>${s.paused_count}</b></div>` +
-    `<div class="card">На рік<b>${Object.entries(s.yearly_by_currency).map(([c, v]) => money(v, c)).join(' + ') || '—'}</b></div>`;
+    `<div class="card card-total" id="total-card">💳 ${t('card.total')}<b>${monthly}</b></div>` +
+    `<div class="card">${t('card.active')}<b>${s.active_count}</b></div>` +
+    `<div class="card">${t('card.paused')}<b>${s.paused_count}</b></div>` +
+    `<div class="card">${t('card.yearly')}<b>${Object.entries(s.yearly_by_currency).map(([c, v]) => money(v, c)).join(' + ') || '—'}</b></div>`;
+}
+function renderUpcoming(up) {
+  if (!up) return;
+  document.getElementById('upcoming').innerHTML =
+    `<tr><th>${t('col.date')}</th><th>${t('col.what')}</th><th>${t('col.amount')}</th><th>${t('col.warning')}</th></tr>` +
+    (up.map(x =>
+      `<tr${x.warning ? ' class="warn"' : ''}><td>${x.date}</td>` +
+      `<td>${emoji(x.subscription)} ${x.kind === 'trial_end' ? t('kind.trial_end') : ''} ${x.subscription.name}</td>` +
+      `<td>${money(x.subscription.amount, x.subscription.currency)}</td>` +
+      `<td>${x.kind === 'trial_end' && x.warning ? t('warn.cancel_before') : ''}</td></tr>`).join('') ||
+     `<tr><td colspan="4">${t('empty.upcoming')}</td></tr>`);
+}
+function renderDemoBanner(empty) {
+  const el = document.getElementById('demo-banner');
+  el.hidden = !empty;
+  if (empty) el.innerHTML =
+    `${t('demo.banner')} <button type="button" id="demo-seed" aria-label="${t('demo.seed')}">${t('demo.seed')}</button>`;
+}
+
+async function load() {
+  const s = await (await fetch('/api/summary')).json();
+  lastSummary = s;
+  renderCards(s);
 
   const subs = await (await fetch('/api/subscriptions')).json();
+  lastEmpty = subs.length === 0;
+  renderDemoBanner(lastEmpty);
   drawSubs(subs);
 
   const up = await (await fetch('/api/upcoming?days=30')).json();
-  document.getElementById('upcoming').innerHTML =
-    '<tr><th>Дата</th><th>Що</th><th>Сума</th><th>Попередження</th></tr>' +
-    (up.map(x =>
-      `<tr${x.warning ? ' class="warn"' : ''}><td>${x.date}</td>` +
-      `<td>${emoji(x.subscription)} ${x.kind === 'trial_end' ? 'Кінець тріалу:' : ''} ${x.subscription.name}</td>` +
-      `<td>${money(x.subscription.amount, x.subscription.currency)}</td>` +
-      `<td>${x.kind === 'trial_end' && x.warning ? 'СКАСУЙТЕ ДО ЦІЄЇ ДАТИ' : ''}</td></tr>`).join('') ||
-     '<tr><td colspan="4">нічого</td></tr>');
+  lastUpcoming = up;
+  renderUpcoming(up);
 }
 load();
 loadAlerts();
+loadI18n();
 // --- PWA: service worker + web notifications про списання сьогодні ---
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/static/sw.js').catch(() => {});

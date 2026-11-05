@@ -100,5 +100,10 @@ def test_family_includes_paused_with_flag_visible(client):
 
 def test_ui_has_payer_column():
     html = TestClient(app).get("/").text
-    assert "Хто платить" in html
+    # 'Хто платить' тепер у i18n-словнику (col.payer)
+    import json
+    from pathlib import Path
+    uk = json.loads((Path(__file__).parent.parent / "static" / "i18n" / "uk.json")
+                    .read_text(encoding="utf-8"))
+    assert uk["col.payer"] == "Хто платить"
     assert "share_pct" in html
