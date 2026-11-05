@@ -13,3 +13,8 @@ dist/
 .env
 .env.*
 *.local
+
+# dotnet build artifacts (нативний акселератор SubRec)
+dotnet/**/bin/
+dotnet/**/obj/
+dotnet/publish/
