@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import csvimport, history, ics, schedule
+from . import csvimport, history, ics, rates, schedule
 from .db import DB_PATH, connect
 
 app = FastAPI(title="subwatch", version="0.1.0",
@@ -154,7 +154,9 @@ def mark_paid(sub_id: int):
 
 
 @app.get("/api/summary")
-def summary():
+def summary(base: str | None = None):
+    """Totals per currency; with ?base=USD/EUR/... everything is converted
+    through ECB reference rates (cached, stale-tolerant)."""
     conn = get_conn()
     rows = conn.execute("SELECT * FROM subscriptions WHERE active = 1").fetchall()
     by_ccy: dict[str, float] = {}
@@ -165,12 +167,30 @@ def summary():
     next_due = conn.execute(
         "SELECT * FROM subscriptions WHERE active = 1 "
         "ORDER BY next_due_date ASC LIMIT 1").fetchone()
-    return {
+    out = {
         "active_count": len(rows),
         "monthly_by_currency": {k: round(v, 2) for k, v in sorted(by_ccy.items())},
         "yearly_by_currency": {k: round(v * 12, 2) for k, v in sorted(by_ccy.items())},
         "next_due": _row_dict(next_due) if next_due else None,
     }
+    if base:
+        base = base.upper()
+        fx = rates.get_rates()
+        if not fx or (base not in fx and base != "EUR"):
+            raise HTTPException(
+                503, "currency conversion unavailable: no ECB rates "
+                     "(offline and no cached rates)")
+        converted = {
+            ccy: rates.convert(v, ccy, base, fx)
+            for ccy, v in by_ccy.items()}
+        missing = [c for c, v in converted.items() if v is None]
+        if missing:
+            raise HTTPException(503, f"no ECB rate for: {', '.join(sorted(missing))}")
+        monthly = sum(converted.values())
+        out["base"] = base
+        out["monthly_in_base"] = round(monthly, 2)
+        out["yearly_in_base"] = round(monthly * 12, 2)
+    return out
 
 
 @app.get("/api/upcoming")
