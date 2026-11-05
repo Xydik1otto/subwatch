@@ -1,7 +1,9 @@
 # FastAPI application: local-first subscription tracker.
 from __future__ import annotations
 
+import csv
 import datetime as dt
+import io
 import os
 from pathlib import Path
 
@@ -572,6 +574,43 @@ def demo_seed():
     conn = get_conn()
     ids = demo_mod.seed_demo(conn)
     return DemoSeedOut(created=ids, already_had_data=ids == [])
+
+
+# --- data safety: one-click export of everything --------------------------------
+
+@app.get("/api/export.json")
+def export_json():
+    """Full export: subscriptions, price history, price-change alerts."""
+    conn = get_conn()
+    subs = [dict(r) for r in conn.execute(
+        "SELECT * FROM subscriptions ORDER BY id").fetchall()]
+    hist = [dict(r) for r in conn.execute(
+        "SELECT * FROM price_history ORDER BY id").fetchall()]
+    alerts_rows = [dict(r) for r in conn.execute(
+        "SELECT * FROM alerts ORDER BY id").fetchall()]
+    return {
+        "exported_at": dt.datetime.now().isoformat(timespec="seconds"),
+        "subscriptions": subs,
+        "price_history": hist,
+        "alerts": alerts_rows,
+    }
+
+
+@app.get("/api/export.csv")
+def export_csv():
+    """Subscriptions as a flat CSV (one row per subscription)."""
+    conn = get_conn()
+    rows = conn.execute("SELECT * FROM subscriptions ORDER BY id").fetchall()
+    cols = list(rows[0].keys()) if rows else ["id", "name", "amount", "currency"]
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=cols, extrasaction="ignore")
+    writer.writeheader()
+    for r in rows:
+        writer.writerow({c: r[c] for c in cols})
+    data = buf.getvalue()
+    return Response(content=data, media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition":
+                             'attachment; filename="subwatch-export.csv"'})
 
 
 # --- price-change alerts (outbox) -----------------------------------------------

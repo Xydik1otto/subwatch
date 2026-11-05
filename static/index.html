@@ -157,7 +157,7 @@ function drawSubs(subs) {
     `<tr><th></th><th>${t('col.name')}</th><th>${t('col.amount')}</th>` +
     `<th>${t('col.cycle')}</th><th>${t('col.next_due')}</th>` +
     `<th>${t('col.trial')}</th><th>${t('col.status')}</th>` +
-    `<th>${t('col.payer')}</th></tr>` +
+    `<th>${t('col.payer')}</th><th>${t('col.actions')}</th></tr>` +
     (visible.map(x => {
       const alerted = unseenAlertIds.has(x.id);
       const cls = x.cancel_planned ? ' class="tocancel"'
@@ -172,10 +172,18 @@ function drawSubs(subs) {
       `<td>${x.name}</td><td>${money(x.amount, x.currency)}</td><td>${x.cycle}</td>` +
       `<td class="due">${x.next_due_date}</td>` +
       `<td>${x.trial_end_date || '—'}</td><td>${badge}</td>` +
-      `<td>${x.payer ? `${x.payer}${x.share_pct != null && x.share_pct !== 100 ? ` (${x.share_pct}%)` : ''}${x.owner ? ` · ${x.owner}` : ''}` : '—'}</td></tr>`;
+      `<td>${x.payer ? `${x.payer}${x.share_pct != null && x.share_pct !== 100 ? ` (${x.share_pct}%)` : ''}${x.owner ? ` · ${x.owner}` : ''}` : '—'}</td>` +
+      `<td><button type="button" class="del" data-del="${x.id}" data-name="${x.name}" aria-label="${t('delete.aria', {name: x.name})}">🗑</button></td></tr>`;
     }).join('') ||
-     `<tr><td colspan="8">${t('empty.subs')}</td></tr>`);
+     `<tr><td colspan="9">${t('empty.subs')}</td></tr>`);
 }
+document.getElementById('subs').addEventListener('click', async (e) => {
+  const btn = e.target.closest && e.target.closest('button[data-del]');
+  if (!btn) return;
+  if (!confirm(t('delete.confirm', {name: btn.dataset.name}))) return;
+  await fetch(`/api/subscriptions/${btn.dataset.del}`, {method: 'DELETE'});
+  load();
+});
 document.getElementById('filters').addEventListener('click', (e) => {
   const f = e.target && e.target.dataset && e.target.dataset.f;
   if (!f) return;
