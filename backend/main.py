@@ -245,6 +245,30 @@ def export_ics(days: int = 90):
                              'attachment; filename="subwatch.ics"'})
 
 
+# --- dashboard: worst offenders -------------------------------------------------
+
+@app.get("/api/worst-offenders")
+def worst_offenders(limit: int = 5):
+    """Top-N subscriptions by monthly equivalent — the 'worst offenders' list.
+
+    share_of_currency_monthly_pct is computed within the subscription's own
+    currency, since totals of different currencies are never mixed.
+    """
+    conn = get_conn()
+    rows = conn.execute("SELECT * FROM subscriptions WHERE active = 1").fetchall()
+    items = [_row_dict(r) for r in rows]
+    totals: dict[str, float] = {}
+    for it in items:
+        totals[it["currency"]] = (totals.get(it["currency"], 0.0) +
+                                  it["monthly_equivalent"])
+    for it in items:
+        total = totals[it["currency"]]
+        it["share_of_currency_monthly_pct"] = (
+            round(it["monthly_equivalent"] / total * 100, 1) if total else 0.0)
+    items.sort(key=lambda d: (-d["monthly_equivalent"], d["name"].lower()))
+    return items[:max(0, limit)]
+
+
 # --- CSV import ---------------------------------------------------------------
 
 class ImportAnalyzeIn(BaseModel):
