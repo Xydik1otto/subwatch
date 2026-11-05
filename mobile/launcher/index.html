@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Subwatch</title>
+<style>
+  :root {
+    --bg: #10131a; --card: #1a1f2b; --fg: #e8eaf0; --muted: #9aa1af;
+    --accent: #4f8cff; --ok: #3fb26f; --err: #d9534f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; display: flex; align-items: center;
+    justify-content: center; background: var(--bg); color: var(--fg);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding: 24px;
+  }
+  .card {
+    width: 100%; max-width: 26rem; background: var(--card);
+    border-radius: 16px; padding: 32px 28px;
+  }
+  h1 { margin: 0 0 4px; font-size: 1.35rem; }
+  .logo { font-size: 2.4rem; }
+  .sub { color: var(--muted); margin: 0 0 22px; font-size: .9rem; }
+  label { display: block; font-size: .85rem; color: var(--muted); margin-bottom: 6px; }
+  input {
+    width: 100%; padding: 12px 14px; border-radius: 10px; font-size: 1rem;
+    border: 1px solid #333a47; background: #10131a; color: var(--fg);
+  }
+  input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  button {
+    width: 100%; margin-top: 14px; padding: 13px; border: 0; border-radius: 10px;
+    background: var(--accent); color: #fff; font-size: 1rem; font-weight: 600;
+  }
+  button.link {
+    background: none; color: var(--muted); font-weight: 400; margin-top: 10px;
+    text-decoration: underline; padding: 6px;
+  }
+  .status { min-height: 1.4em; margin-top: 12px; font-size: .9rem; color: var(--muted); }
+  .status.ok { color: var(--ok); }
+  .status.err { color: var(--err); }
+  .hidden { display: none; }
+  footer { margin-top: 26px; font-size: .78rem; color: var(--muted); line-height: 1.45; }
+</style>
+</head>
+<body>
+<main class="card">
+  <div class="logo">👀</div>
+  <h1 id="title">Subwatch</h1>
+  <p class="sub" id="subtitle">Свої підписки. Свій сервер.</p>
+
+  <form id="form" class="hidden">
+    <label for="server" id="label">Адреса сервера</label>
+    <input id="server" type="url" inputmode="url" autocomplete="off"
+           placeholder="http://192.168.1.10:8000" required>
+    <button type="submit" id="connect">Підключитися</button>
+  </form>
+
+  <div id="connecting" class="hidden">
+    <div class="status" id="wait"></div>
+    <button type="button" class="link" id="change">Змінити сервер</button>
+  </div>
+
+  <div class="status" id="msg" role="status"></div>
+
+  <footer id="foot">
+    Введіть адресу вашого сервера subwatch (FastAPI). Доступ ззовні —
+    через Tailscale / WireGuard.
+  </footer>
+</main>
+
+<script>
+// i18n UA/EN (російську локалізацію не додано — свідоме рішення проєкту).
+var T = {
+  uk: {
+    sub: 'Свої підписки. Свій сервер.',
+    label: 'Адреса сервера',
+    connect: 'Підключитися',
+    wait: 'Підключення до {url}…',
+    ok: 'Сервер знайдено. Відкриваю…',
+    err: 'Не вдалося зʼєднатися з {url}. Перевірте адресу та мережу.',
+    change: 'Змінити сервер',
+    foot: 'Введіть адресу вашого сервера subwatch (FastAPI). ' +
+          'Доступ ззовні — через Tailscale / WireGuard.',
+    // нотифікації — та сама логіка текстів, що в static/sw.js (PWA)
+    todayTitleOne: 'Списання сьогодні: {name}',
+    todayTitleMany: 'Списань сьогодні: {n}',
+    todayMore: '… і ще {n}'
+  },
+  en: {
+    sub: 'Your subscriptions. Your server.',
+    label: 'Server address',
+    connect: 'Connect',
+    wait: 'Connecting to {url}…',
+    ok: 'Server found. Opening…',
+    err: 'Could not reach {url}. Check the address and your network.',
+    change: 'Change server',
+    foot: 'Enter the address of your subwatch (FastAPI) server. ' +
+          'For remote access use Tailscale / WireGuard.',
+    todayTitleOne: 'Charge today: {name}',
+    todayTitleMany: 'Charges today: {n}',
+    todayMore: '… and {n} more'
+  }
+};
+var lang = (navigator.language || 'en').slice(0, 2).toLowerCase() === 'uk' ? 'uk' : 'en';
+var t = T[lang];
+document.documentElement.lang = lang;
+
+function fill(map) {
+  document.getElementById('subtitle').textContent = map.sub;
+  document.getElementById('label').textContent = map.label;
+  document.getElementById('connect').textContent = map.connect;
+  document.getElementById('change').textContent = map.change;
+  document.getElementById('foot').textContent = map.foot;
+}
+fill(t);
+
+// Preferences-плагін у вебвʼю Capacitor; localStorage — фолбек у звичайному браузері.
+var store = {
+  get: function (key) {
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Preferences) {
+      return window.Capacitor.Plugins.Preferences.get({ key: key }).then(function (r) {
+        return r.value || '';
+      });
+    }
+    return Promise.resolve(localStorage.getItem(key) || '');
+  },
+  set: function (key, value) {
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Preferences) {
+      return window.Capacitor.Plugins.Preferences.set({ key: key, value: value });
+    }
+    localStorage.setItem(key, value);
+    return Promise.resolve();
+  }
+};
+
+function normalize(raw) {
+  var url = (raw || '').trim();
+  if (!url) return '';
+  if (!/^https?:\/\//i.test(url)) url = 'http://' + url;
+  return url.replace(/\/+$/, '');
+}
+
+function show(id) {
+  ['form', 'connecting'].forEach(function (el) {
+    document.getElementById(el).classList.toggle('hidden', el !== id);
+  });
+}
+
+function probe(url) {
+  var ctrl = new AbortController();
+  var timer = setTimeout(function () { ctrl.abort(); }, 4000);
+  return fetch(url + '/api/today', { signal: ctrl.signal, mode: 'no-cors' })
+    .then(function () { clearTimeout(timer); return true; })
+    .catch(function () { clearTimeout(timer); return false; });
+}
+
+// --- Пуш-нотифікації про сьогоднішні списання -------------------------------
+// Той самий потік, що в PWA: сторінка тягне /api/today і віддає результат
+// «понотифікаційному шару». У браузері цей шар — service worker
+// (static/sw.js, повідомлення через postMessage); у нативній оболонці це
+// @capacitor/local-notifications з тою самою логікою заголовка/тіла.
+var NOTIF_ID = 1;   // сталий id: повторне списання замінює попереднє (як tag у SW)
+
+function plugins() {
+  return (window.Capacitor && window.Capacitor.Plugins) || {};
+}
+
+function notifyChargesToday(items) {
+  var caps = plugins();
+  if (!caps.LocalNotifications) return Promise.resolve(false);  // браузерний фолбек: нічого
+  var LocalNotifications = caps.LocalNotifications;
+  var lines = items.map(function (s) {
+    return s.name + ' — ' + s.amount.toFixed(2) + ' ' + s.currency;
+  });
+  var body = lines.length <= 3 ? lines.join('\n')
+    : lines.slice(0, 3).join('\n') + '\n' + t.todayMore.replace('{n}', lines.length - 3);
+  var title = items.length === 1
+    ? t.todayTitleOne.replace('{name}', items[0].name)
+    : t.todayTitleMany.replace('{n}', items.length);
+  return LocalNotifications.checkPermissions().then(function (p) {
+    if (p.display !== 'granted') {
+      return LocalNotifications.requestPermissions().then(function (r) {
+        return r.display === 'granted';
+      });
+    }
+    return true;
+  }).then(function (granted) {
+    if (!granted) return false;
+    return LocalNotifications.schedule({
+      notifications: [{
+        id: NOTIF_ID,
+        title: title,
+        body: body,
+        schedule: { at: new Date(Date.now() + 300) }
+      }]
+    }).then(function () { return true; });
+  }).catch(function () { return false; });
+}
+
+// Раз на добу на сервер: повторні запуски застосунку не спамлять.
+function chargesTodayCheck(url) {
+  var today = new Date().toISOString().slice(0, 10);
+  return store.get('notifiedOn').then(function (last) {
+    if (last === today) return;
+    return fetch(url + '/api/today')
+      .then(function (r) { return r.ok ? r.json() : []; })
+      .then(function (items) {
+        if (!Array.isArray(items) || !items.length) return;
+        return notifyChargesToday(items).then(function (shown) {
+          if (shown) return store.set('notifiedOn', today);
+        });
+      })
+      .catch(function () { /* сервер недоступний — тихо, як у PWA */ });
+  });
+}
+
+function connect(url) {
+  show('connecting');
+  document.getElementById('wait').textContent = t.wait.replace('{url}', url);
+  document.getElementById('msg').textContent = '';
+  document.getElementById('msg').className = 'status';
+  probe(url).then(function (reachable) {
+    if (reachable) {
+      document.getElementById('wait').textContent = t.ok;
+      store.set('serverUrl', url).then(function () {
+        chargesTodayCheck(url).catch(function () {});
+        setTimeout(function () { window.location.replace(url); }, 600);
+      });
+    } else {
+      document.getElementById('msg').textContent = t.err.replace('{url}', url);
+      document.getElementById('msg').className = 'status err';
+      show('form');
+    }
+  });
+}
+
+document.getElementById('form').addEventListener('submit', function (e) {
+  e.preventDefault();
+  var url = normalize(document.getElementById('server').value);
+  if (!url) return;
+  document.getElementById('server').value = url;
+  connect(url);
+});
+
+document.getElementById('change').addEventListener('click', function () {
+  show('form');
+  document.getElementById('server').focus();
+});
+
+store.get('serverUrl').then(function (saved) {
+  if (saved) connect(saved);
+  else {
+    show('form');
+    document.getElementById('server').focus();
+  }
+});
+</script>
+</body>
+</html>
